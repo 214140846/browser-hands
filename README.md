@@ -1,5 +1,7 @@
 # ThunderMCP
 
+![ThunderMCP: your Chrome, driven by your agents, locally](docs/images/hero.jpg)
+
 > A fast, local Chrome MCP server for AI agents. Your browser, your logins, near-zero overhead.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
@@ -27,6 +29,8 @@ Most browser automation for agents means a cloud VM, a heavy headless browser, o
 - **Small footprint.** Screenshots are scaled by Chrome itself through the DevTools Protocol. No in-page canvas work, no animated overlays.
 
 ## Features
+
+![Each agent works in its own tab group](docs/images/parallel-agents.jpg)
 
 - **Parallel agents without cross-talk.** Each agent session gets its own Chrome tab group and can only see and act on tabs inside it.
 - **Multiple profiles.** Install the extension in several Chrome profiles. The agent sees each profile's name and signed-in email and can switch between them.
@@ -88,6 +92,9 @@ graph TD
 *Measured on a MacBook with a pre-release build, using a real e-commerce exchange flow (find order, pick item, choose new variant, review page, stop before submit).*
 
 ### CPU
+
+![Flat CPU line vs. a spiky one](docs/images/low-cpu.jpg)
+
 | Scenario | Result |
 |---|---|
 | Another browser-agent extension, heavy news page (read + scroll + screenshot) | Chrome uses **+108%** CPU vs. idle (about one extra core) |
