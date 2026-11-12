@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ThunderMCP</title>
+<style>
+  body { width: 320px; margin: 0; padding: 12px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #141413; background: #FAF9F5; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .session { margin: 8px 0; padding: 8px; border: 1px solid #e5e2d8; border-radius: 8px; }
+  .session b { display: block; }
+  .tabs { margin: 4px 0 0; padding-left: 16px; color: #555; }
+  .tabs li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: #777; }
+  button { margin-top: 8px; padding: 6px 12px; border: 1px solid #19c3a6; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+  button:disabled { opacity: .4; cursor: default; }
+</style>
+<h1>ThunderMCP</h1>
+<p id="balance" class="empty">Model balance: loading…</p>
+<div id="list"></div>
+<button id="stopAll" disabled>Stop all</button>
+<script type="module" src="popup.js"></script>

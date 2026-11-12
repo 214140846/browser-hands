@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1f5f9"/><stop offset=".55" stop-color="#94a3b8"/><stop offset="1" stop-color="#475569"/></linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fef08a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#1e3a8a"/>
+  <!-- T 的横：雷神锤锤头（两端加厚的锤面） -->
+  <path d="M12 16 h104 a4 4 0 0 1 4 4 v30 a4 4 0 0 1 -4 4 h-104 a4 4 0 0 1 -4 -4 v-30 a4 4 0 0 1 4 -4 z" fill="url(#steel)" stroke="#0f172a" stroke-width="4"/>
+  <path d="M30 16 v38 M98 16 v38" stroke="#0f172a" stroke-width="3" opacity=".6"/>
+  <rect x="44" y="24" width="40" height="22" rx="3" fill="none" stroke="#0f172a" stroke-width="2.5" opacity=".45"/>
+  <!-- T 的竖：一道粗闪电 -->
+  <path d="M54 54 H82 L70 80 H86 L52 124 L60 92 H44 Z" fill="url(#bolt)" stroke="#0f172a" stroke-width="4" stroke-linejoin="round"/>
+</svg>
