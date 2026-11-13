@@ -2,7 +2,6 @@
 // 设计：每个工具 = 「schema 形状 + 处理函数」，处理函数只产出 Out（文字 / 可选图片 / 是否要附标签块），
 // 通用流程（选浏览器、会话标识、脱敏、截断、提示器、错误收口）与 browser_batch 都复用同一批处理函数。
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -12,11 +11,12 @@ import { getJev } from './jev'
 import { jevResult, jevStatus, jevStop, startJevTask } from './jev-task'
 import { check, formatFind, jevFindJson, parseTree, prefilter, rank } from './jev-tools'
 import { makeHinter, truncateOutput } from './output'
+import RAW_INSTRUCTIONS from './instructions.md' with { type: 'text' }
 import { PROTOCOL_VERSION } from './paths'
 import { describe, online, pick, refresh, refreshInfo, select, switchBrowser } from './registry'
 
-// ---------- 服务器说明：取自同目录 instructions.md，去掉独占首行的 HTML 注释 ----------
-const INSTRUCTIONS = readFileSync(new URL('./instructions.md', import.meta.url), 'utf8')
+// Server instructions: bundled from instructions.md at build time (first-line HTML comment stripped)
+const INSTRUCTIONS = RAW_INSTRUCTIONS
   .replace(/^<!--.*-->[ \t]*\r?\n/, '')
   .trim()
 
