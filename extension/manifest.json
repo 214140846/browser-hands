@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ThunderMCP",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Let AI agents drive your browser over MCP.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1oMzkm78XxrbOopU5j9lC0MnAMlPjkkgB22+Wj2BZVa+GCcazfFtOSvNuPK2iunCNvD80uBwMtYZnVJtwhlXaBPanobQLa6ofPZbKoAxO3qe/K+6zcCA6Dax8sPG6yIH5IHcJMSh3lIUC/jDYeAdJ4X6D1rdiR0F7km7k6Xjtu6Lp1QWgEymv6x97+HDGhwdvape+ZVtVxNPB5Wf4JAx5/Ea8LboRiQt3KtMaS3TBZh3g1l5fmRcqlmpAtT3MLfKJA61yeKhtXZ+HZ1pdaYE4Fr4IbOn10R3/q0OcDmyNAw10cG9PWG44xLnB6pdRerEJNvVvbH5+yg8H22MyD3QswIDAQAB",
   "minimum_chrome_version": "116",
