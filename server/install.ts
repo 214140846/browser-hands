@@ -30,7 +30,7 @@ export function writeHostManifest(targetDir: string): string {
     JSON.stringify(
       {
         name: HOST_NAME,
-        description: 'ThunderMCP native host',
+        description: 'Browser Hands native host',
         path: launcher,
         type: 'stdio',
         allowed_origins: [`chrome-extension://${extensionId()}/`],

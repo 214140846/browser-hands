@@ -171,7 +171,7 @@ export function makeProvider(settings: Settings, { fetchImpl = fetch as typeof f
       try {
         res = await fetchImpl(url, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'ThunderMCP', 'HTTP-Referer': 'https://jevbrowsercontrol.com' },
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Browser Hands', 'HTTP-Referer': 'https://jevbrowsercontrol.com' },
           body: JSON.stringify(body),
           signal,
         })

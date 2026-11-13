@@ -1,4 +1,4 @@
-# ThunderMCP — notes for coding agents
+# Browser Hands — notes for coding agents
 
 Chrome extension (`extension/`) + local MCP server (`server/`).
 

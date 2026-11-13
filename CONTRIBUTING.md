@@ -1,4 +1,4 @@
-# Contributing to ThunderMCP
+# Contributing to Browser Hands
 
 Thanks for helping out. This guide covers the dev setup, how the repo is laid out, and how changes get merged.
 
@@ -66,4 +66,4 @@ Be kind and constructive. We follow the [Contributor Covenant](https://www.contr
 
 ## License
 
-ThunderMCP is released under the [MIT License](LICENSE). By contributing, you agree that your contributions are licensed under the MIT License.
+Browser Hands is released under the [MIT License](LICENSE). By contributing, you agree that your contributions are licensed under the MIT License.

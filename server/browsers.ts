@@ -93,13 +93,13 @@ export async function explainNoBrowser(): Promise<string> {
   const manifests = Object.values(nativeHostDirs).filter((d) => existsSync(join(d, `${HOST_NAME}.json`)))
   if (!manifests.length && !process.env.JEV_SOCKET_DIR)
     return 'Cannot reach the browser: the host manifest is not installed. Run `bun run setup` in the v2 directory, then restart Chrome.'
-  if (!(await chromeRunning())) return 'Cannot reach the browser: Chrome is not running. Open Chrome (with the ThunderMCP extension installed).'
+  if (!(await chromeRunning())) return 'Cannot reach the browser: Chrome is not running. Open Chrome (with the Browser Hands extension installed).'
   if (await hostRunning()) {
     // 升级前的 host 把连接文件放在 /tmp，不会自愈，只能重启
     const legacy = `/tmp/thundermcp-${userInfo().username}`
     if (legacy !== socketDir() && existsSync(legacy) && readdirSync(legacy).some((f) => f.endsWith('.sock')))
       return `Cannot reach the browser: the running host is an old pre-upgrade version (its socket file is ${legacy}). Restart it with \`pkill -f 'thundermcp.mjs host'\`; Chrome will relaunch it.`
-    return `Cannot reach the browser: the host is running but has no socket file (.sock) in ${socketDir()}. It was probably cleaned up and the host will recreate it within 5 seconds, so retry shortly. If it persists, the host and MCP may use different JEV_SOCKET_DIR values, or reload the ThunderMCP extension at chrome://extensions (this restarts the host).`
+    return `Cannot reach the browser: the host is running but has no socket file (.sock) in ${socketDir()}. It was probably cleaned up and the host will recreate it within 5 seconds, so retry shortly. If it persists, the host and MCP may use different JEV_SOCKET_DIR values, or reload the Browser Hands extension at chrome://extensions (this restarts the host).`
   }
-  return 'Cannot reach the browser: Chrome is open but no host has connected. The ThunderMCP extension is probably not installed or is disabled (chrome://extensions), or the extension ID in the host manifest is wrong.'
+  return 'Cannot reach the browser: Chrome is open but no host has connected. The Browser Hands extension is probably not installed or is disabled (chrome://extensions), or the extension ID in the host manifest is wrong.'
 }

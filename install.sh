@@ -1,7 +1,7 @@
 #!/bin/sh
-# ThunderMCP installer (macOS + Linux, POSIX sh).
+# Browser Hands installer (macOS + Linux, POSIX sh).
 #
-#   curl -fsSL https://github.com/214140846/thundermcp/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/214140846/browser-hands/releases/latest/download/install.sh | sh
 #   sh install.sh [--dry-run] [--browser chrome|chromium|chrome-for-testing] [--dir DIR] [--uninstall]
 #
 # What it does:
@@ -14,9 +14,9 @@
 
 # --- Placeholders: replace both before publishing a release -----------------
 # Base URL that serves the release assets: thundermcp.mjs and extension.tar.gz
-INSTALL_URL="${THUNDERMCP_INSTALL_URL:-https://github.com/214140846/thundermcp/releases/latest/download}"
+INSTALL_URL="${THUNDERMCP_INSTALL_URL:-https://github.com/214140846/browser-hands/releases/latest/download}"
 # Source repository (shown in messages)
-REPO_URL="https://github.com/214140846/thundermcp"
+REPO_URL="https://github.com/214140846/browser-hands"
 # -----------------------------------------------------------------------------
 
 set -eu
@@ -50,7 +50,7 @@ done
 case "$(uname -s)" in
   Darwin) OS=macos ;;
   Linux) OS=linux ;;
-  *) die "unsupported OS '$(uname -s)'. ThunderMCP supports macOS and Linux." ;;
+  *) die "unsupported OS '$(uname -s)'. Browser Hands supports macOS and Linux." ;;
 esac
 
 # Native messaging host directory. The bundled `setup` command only knows macOS
@@ -90,7 +90,7 @@ if [ "$UNINSTALL" = 1 ]; then
     if [ "$DRY" = 1 ]; then say "[dry-run] claude mcp remove thundermcp -s user"; else claude mcp remove thundermcp -s user >/dev/null 2>&1 || true; fi
   fi
   run rm -rf "$DEST"
-  say "ThunderMCP removed. Remove the extension from chrome://extensions manually."
+  say "Browser Hands removed. Remove the extension from chrome://extensions manually."
   exit 0
 fi
 
@@ -99,7 +99,7 @@ fi
 SELF_DIR=""
 case "$0" in */*) SELF_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)" ;; esac
 
-say "Installing ThunderMCP into $DEST"
+say "Installing Browser Hands into $DEST"
 run mkdir -p "$DEST"
 
 if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/dist/thundermcp.mjs" ] && [ -f "$SELF_DIR/extension/manifest.json" ]; then
@@ -108,7 +108,7 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/dist/thundermcp.mjs" ] && [ -f "$SELF_D
   run rm -rf "$DEST/extension"
   run cp -R "$SELF_DIR/extension" "$DEST/extension"
 else
-  command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || { [ "$DRY" = 1 ] || die "curl or wget is required to download ThunderMCP."; }
+  command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || { [ "$DRY" = 1 ] || die "curl or wget is required to download Browser Hands."; }
   command -v tar >/dev/null 2>&1 || { [ "$DRY" = 1 ] || die "tar is required."; }
   TMP="${TMPDIR:-/tmp}/thundermcp-install.$$"
   trap 'rm -rf "$TMP"' EXIT INT TERM

@@ -391,7 +391,7 @@ const DEFS: Record<string, Def> = {
 }
 
 // ---------- 服务器与通用流程 ----------
-const server = new McpServer({ name: 'thundermcp', version: '0.1.1' }, { instructions: INSTRUCTIONS })
+const server = new McpServer({ name: 'thundermcp', version: '0.2.0' }, { instructions: INSTRUCTIONS })
 const hinter = makeHinter()
 let sessionId = ''
 
