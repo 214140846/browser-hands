@@ -11,6 +11,10 @@
 
 Browser Hands is a Chrome extension plus a small local MCP (Model Context Protocol) server. It lets any MCP-capable agent (Claude Code, Codex, Cursor and others) drive the Chrome you already use: click, type, read pages, take screenshots, run JavaScript and record GIFs, without a cloud VM or a headless browser.
 
+[![Demo: an agent fills in a Product Hunt launch form inside a logged-in Chrome](docs/media/demo.gif)](docs/media/demo.mp4)
+
+*An agent filling in a Product Hunt launch form in my own logged-in Chrome (sped up, idle waits removed). [MP4](docs/media/demo.mp4)*
+
 <!-- DEMO VIDEO 1 -->
 > **Demo 1: Bulk work in one shot.** An agent learns one form, then injects a script to submit it across many sites, stopping before every final submit.
 
