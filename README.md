@@ -108,16 +108,20 @@ Any other MCP client that can start a stdio server works the same way: command `
 
 ## How it compares
 
-Browser Hands is one of several ways to give an agent a browser. The main difference is *which* browser the agent drives.
+Browser Hands is one of several ways to give an agent a browser. Other common options are Playwright MCP and Chrome DevTools MCP. Their default setup starts or attaches to a browser for automation. Both projects also document ways to connect to an existing Chrome, so check their current docs if that is what you need.
 
-| | Browser Hands | A Playwright-style MCP server | A DevTools-port MCP server |
-|---|---|---|---|
-| Browser the agent drives | Your everyday Chrome, through an extension | Usually a separate browser it starts | A Chrome started with a remote debugging port |
-| Your logins and cookies | Already there | Usually you log in again, or load saved state | Depends on which profile you start |
-| Remote debugging port (`9222`) | Not needed | Not needed | Needed |
-| Parallel agents isolated by tab group | Yes | — | — |
+What Browser Hands gives you:
 
-Pick a Playwright-style server when you want a clean, scripted, reproducible browser (for example in CI). Pick Browser Hands when the agent should work in the browser you actually use, with your accounts.
+| | Browser Hands |
+|---|---|
+| Browser the agent drives | Your everyday Chrome, through an extension |
+| Your logins and cookies | Already there, from your normal profile |
+| Remote debugging port (`9222`) | Not needed |
+| Parallel agents | Each session gets its own tab group and cannot act on other tabs |
+| Several Chrome profiles | `list_connected_browsers` / `select_browser` |
+| Tool names | 16 tools match Claude in Chrome's names and arguments |
+
+Pick a Playwright-style setup when you want a clean, scripted, reproducible browser (for example in CI). Pick Browser Hands when the agent should work in the browser you actually use, with your accounts, and several agents may run at once.
 
 ## How it works
 
