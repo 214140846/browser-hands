@@ -13,6 +13,8 @@ Browser Hands is a Chrome extension plus a small local MCP (Model Context Protoc
 
 **In one sentence:** if you want Claude Code, Cursor, Codex or another MCP client to control *your existing Chrome* (your tabs, your cookies, your logged-in accounts) instead of a fresh headless browser, this is what Browser Hands does. It is free and open source (MIT).
 
+**Jump to:** [Quick start](#quick-start) · [Problems it solves](#problems-it-solves) · [What people use it for](#what-people-use-it-for) · [When the obvious tool gets in the way](#when-the-obvious-tool-gets-in-the-way) · [What it does not do](#what-it-does-not-do) · [Troubleshooting](#troubleshooting) · [FAQ](#faq)
+
 [![Demo: an agent fills in a Product Hunt launch form inside a logged-in Chrome](docs/media/demo.gif)](docs/media/demo.mp4)
 
 *An agent filling in a Product Hunt launch form in my own logged-in Chrome (sped up, idle waits removed). [MP4](docs/media/demo.mp4)*
@@ -33,6 +35,150 @@ Most browser automation for agents means a cloud VM, a heavy headless browser, o
 - **Local only.** No cloud, no accounts, no sidebar chat, no per-site permission popups. Your agent talks to your Chrome through a local process.
 - **Familiar tool interface.** 16 of the 26 tools use the same names and arguments as the browser tools agents already know from Claude in Chrome, so existing prompts mostly carry over. The other 10 are Browser Hands additions.
 - **Small footprint.** Screenshots are scaled by Chrome itself through the DevTools Protocol. No in-page canvas work, no animated overlays.
+
+## Problems it solves
+
+These are the complaints we see most often in GitHub issues, Reddit and Hacker News threads about AI browser tools. Each row says what Browser Hands does about it.
+
+### Connection and accounts
+
+| You hit this | What Browser Hands does |
+|---|---|
+| "Browser extension is not connected" even though you are signed in | There is nothing to sign in to. The extension talks to a local process through Chrome native messaging. |
+| You have several Claude accounts or organizations, and after you switch, the browser extension stays tied to the old one or stops connecting | Browser Hands has no account and no organization. Switching your Claude account, org or plan does not change the browser connection. |
+| The extension signs you out every time Chrome restarts, so unattended tasks break | No sign-in to lose. |
+| The browser integration only works with one agent, or not with API-key / Bedrock / Vertex setups | Any MCP client that can start a stdio server works: Claude Code (any login method), Cursor, Codex and others. |
+| You must start Chrome with a remote debugging port, or newer Chrome refuses CDP on your default profile | No debugging port. The extension uses Chrome's `debugger` API inside your normal profile. |
+| Your agent opens a fresh browser, so you are logged out of everything | The agent works in the Chrome you already use, with your cookies and sessions. |
+| A built-in or sandboxed browser breaks SSO, password managers or other extensions | It is your real Chrome, so your SSO, password manager and extensions are all there. |
+
+### Permissions and prompts
+
+| You hit this | What Browser Hands does |
+|---|---|
+| A permission prompt on every site, or on every action, even after "Always allow" | No per-site or per-action prompts. You decide what the agent may do in your instructions. |
+| `localhost`, banking or ERP sites are blocked by the tool | Browser Hands has no site blocklist. The agent can open any page your Chrome can open (Chrome itself still protects `chrome://` pages). |
+| A "connect" popup every time the agent starts | You only see a popup when the agent calls `switch_browser`, to choose which Chrome profile it should use. |
+
+### Several agents, tabs and profiles
+
+| You hit this | What Browser Hands does |
+|---|---|
+| Two agent sessions fight over the same browser or the same tabs | Each MCP session gets its own tab group and can only act on tabs inside it. |
+| Parallel sub-agents click over each other | Same isolation: one tab group per session. In our test, 3 agents ran at once with 0 actions on the wrong tab. |
+| You use one Chrome profile per client or per account, and the agent picks the wrong one | `list_connected_browsers` shows every connected profile with its name and signed-in email. `select_browser` picks one. |
+| The tool can only use one tab, or loses track after a new tab opens | `tabs_context_mcp` lists the session's tabs. The agent can create, switch and close tabs by ID. |
+| The agent steals window focus or needs Chrome in front | Clicks and typing work in background tabs and minimized windows, without bringing Chrome to the front. |
+
+### Speed, CPU and tokens
+
+| You hit this | What Browser Hands does |
+|---|---|
+| Screenshots pile up and burn your context or usage limit | Agents are told to read the page as text first (`read_page`, `get_page_text`, `find`) and use screenshots only when text is not enough. |
+| One page dumps tens of thousands of tokens | `read_page` takes `filter: "interactive"`, `ref_id`, `depth` and `max_chars`. `get_page_text` takes `max_chars`. |
+| Every step is a separate slow tool call | `browser_batch` runs several actions in one call. For many similar items the agent can run one script with `javascript_tool`, or hand a known route to the fast `quick_task` executor. |
+| The extension makes Chrome slow | Measured at 1.4% average CPU for the extension process with two agents (see [Benchmarks](#benchmarks)). |
+
+### Hard pages
+
+| You hit this | What Browser Hands does |
+|---|---|
+| The agent can click inside an iframe but cannot type, or cannot see iframe content | `read_page` scans every frame, including cross-origin iframes. Element refs carry a frame prefix (for example `f2:ref_5`) and work with `computer` and `form_input`. |
+| File upload fails or is refused | `file_upload` takes absolute paths of files on your machine, or inline content. Large files are streamed in pieces. |
+| The agent cannot see why the page broke | `read_console_messages` and `read_network_requests` give it the console log and network requests of the tab. |
+| You cannot see what the agent actually did | `gif_creator` records the session as a GIF. The popup lists every active session and its tabs. |
+
+## What people use it for
+
+Real jobs people ask AI agents to do in a browser, grouped by who asks.
+
+### Developers and QA
+
+- **Check a change on `localhost` after each edit.** *"Open http://localhost:3000, sign up with a test user and tell me what breaks."*
+- **Debug with the console and network log.** *"Reload the checkout page, read the console errors and the failed requests, then fix the code."*
+- **Test a logged-in app without building an auth setup.** The agent uses the session already in your Chrome.
+- **Compare the UI with a design.** Screenshots (`computer` → `screenshot` / `zoom`) let the agent look at the result.
+- **Do the web-console setup steps it used to ask you to do.** Create a Stripe product, copy an API key, set a webhook URL, change a DNS record, in dashboards you are already logged into.
+- **Inspect the DOM and accessibility tree** to write selectors, docs or schema.
+- **Record a GIF of a bug** to attach to an issue.
+
+### Founders and marketers
+
+- **Submit a product to many directories.** The agent learns one form, then fills the others, and stops before each final submit.
+- **Draft social posts on Reddit, X or LinkedIn** in your own logged-in accounts, and leave the final "Post" click to you.
+- **Update WordPress or CMS settings** through the admin UI.
+- **Research competitors** across many sites and tabs, including review sites, and collect the results.
+
+### Sales and CRM
+
+- **Clean or update CRM records** (HubSpot, Salesforce and similar) through the web UI when there is no API or no API access.
+- **Prepare prospect briefs** from company sites and profiles you can already see when logged in.
+- **Enter rows from a CSV into a web form**, one by one.
+
+### E-commerce and operations
+
+- **Bulk-edit listings** in Shopify admin or a marketplace seller dashboard: prices, fields, stock.
+- **Read numbers from internal dashboards** that have no API, and summarize them.
+- **Work in two accounts at once** by giving each Chrome profile its own agent.
+
+### Finance and personal admin
+
+- **Download statements and invoices** from portals you are logged into.
+- **Fill in long government or application forms**, with you reviewing before submit.
+- **Compare prices** across shops in parallel tabs.
+
+## When the obvious tool gets in the way
+
+The jobs above, combined with the problem that usually blocks them.
+
+**"I want my agent to test my logged-in dashboard, but the test browser is always logged out."**
+Browser Hands drives your own Chrome profile, so the agent starts already logged in. Nothing to export or configure.
+
+**"I have two Claude accounts (work and personal). Every time I switch org, the browser extension stops connecting."**
+Browser Hands does not use your Claude account at all. Switch accounts or orgs in Claude Code as often as you like. The browser connection stays the same.
+
+**"I want three agents working at the same time, but they keep grabbing each other's tabs."**
+Each agent session gets its own Chrome tab group and cannot act outside it. Start the three sessions and let them run.
+
+**"I want the agent to work for client A and client B, but each client uses a different Chrome profile and Google account."**
+Install the extension in both profiles. The agent calls `list_connected_browsers`, sees both profiles with their emails, and uses `select_browser` for the right one.
+
+**"I want my coding agent to debug a failed API call, but it can't see the browser's network traffic."**
+`read_network_requests` returns the tab's requests, and `read_console_messages` returns the console log, in the same Chrome where you reproduce the bug.
+
+**"I want to verify UI changes on localhost, but my browser tool blocks localhost."**
+There is no site blocklist. `localhost` and `127.0.0.1` work like any other page.
+
+**"I want to automate Gmail or Notion, but I don't want to give the agent my password or an API token."**
+You don't. The agent uses the session that is already open in your Chrome. Browser Hands never asks for or stores passwords.
+
+**"I want to bulk-update 130 listings in a web app with no API, but the agent is slow and burns tokens."**
+Let the agent learn one listing, then run one `javascript_tool` script over the rest, or hand a fixed route to `quick_task`. Text-first reading keeps each step small.
+
+**"I want the agent to fill a form inside an embedded app or iframe, but typing goes nowhere."**
+Refs from `read_page` cover cross-origin iframes, and `form_input` / `computer` type into the right frame.
+
+**"I want to post on Reddit, X or LinkedIn from my own account, but I don't want the agent to press Post by itself."**
+Agents are instructed to stop before final submit and send. With `quick_task`, `stopBefore` hard-blocks named buttons such as "Post".
+
+**"I want to keep working while the agent runs, but it keeps pulling Chrome to the front."**
+Clicks and typing work in background tabs and minimized windows.
+
+**"I want the agent to upload a document, but file inputs fail."**
+Give `file_upload` the absolute path of the file on your machine.
+
+## What it does not do
+
+To save you time, here is what Browser Hands does not cover today:
+
+- **Windows and WSL** are not supported. Linux is experimental.
+- **Brave, Arc, Edge, Vivaldi** are not tested. Google Chrome 116+ is the target.
+- **Locked-down Chrome** where Developer mode is disabled by policy: the extension is loaded unpacked, so it needs Developer mode.
+- **CAPTCHAs and anti-bot checks** are not solved or bypassed. The agent pauses and asks you.
+- **`alert` / `confirm` dialogs** are not answered automatically. Only "leave page?" prompts are handled during navigation.
+- **Scheduling** is not built in. Use your agent client or cron to start a session.
+- **A browser on another machine** (remote server, SSH) cannot be controlled. The MCP server and Chrome must be on the same computer.
+- **Generating Playwright test code**, performance traces and Electron apps are out of scope.
 
 ## Features
 
@@ -97,7 +243,7 @@ args = ["/Users/you/.thundermcp/thundermcp.mjs", "mcp"]
 
 Any other MCP client that can start a stdio server works the same way: command `node`, arguments `<path>/thundermcp.mjs mcp`.
 
-## What you can do with it
+## Tools in practice
 
 - **Work in sites you are already logged into.** Gmail, GitHub, Notion, Jira, admin panels, internal tools: the agent uses the session that is already in your Chrome profile. You do not give it a password, and it does not need an API integration for each site.
 - **Test your web app in a real browser.** Let your coding agent open `localhost`, click through the change it just made, read console errors (`read_console_messages`) and network requests (`read_network_requests`), and take screenshots to check the UI.
@@ -216,6 +362,7 @@ Yes. Each agent session gets its own tab group and can only act on tabs inside i
 **Is it safe to let an agent control my Chrome?**
 Treat it like giving a person your unlocked laptop: the agent can do what you can do in the pages it opens. Browser Hands limits the risk in these ways:
 - Everything runs locally. No account and no Browser Hands cloud.
+- The MCP server and the extension talk through Chrome native messaging and a local Unix socket in a folder only your user can read. There is no network port, so other web pages cannot reach it.
 - Each agent only sees the tabs in its own tab group.
 - Agents are told to stop and ask before final submit, payment, send and delete, and to hand CAPTCHAs to you.
 - `quick_task` can hard-block named buttons with `stopBefore`.
