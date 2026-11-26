@@ -33,6 +33,7 @@
 | `./sessions.js` | `resolveTabId` | `(params: object, s: Session) => number` | 决定本次操作哪个标签（调用方给了 `tabId` 用它，否则用会话主标签） |
 | `./sessions.js` | `listTabs` | `(s: Session) => Promise<Tab[]>` | 本会话标签组里的标签，元素形如 `chrome.tabs.Tab`（本模块读 `id`、`title`、`url`、`pendingUrl`，均可能缺） |
 | `./sessions.js` | `joinGroup` | `(s: Session, tabId: number) => Promise<void>` | 把新开的标签并入会话标签组 |
+| `./sessions.js` | `setTask` | `(s: Session, name: string) => Promise<void>` | `tabs_context_mcp` 的参数带字符串 `session_name` 时调用（不带不调），设任务名并刷新标签组标题 |
 | `./sessions.js` | `closeSession` | `(sessionId: string) => Promise<object>` | 清理会话；其结果就是 `session_closed` 的结果 |
 | `./guard.js` | `startGuard` | `(tabId: number) => Promise<Guard>` | 记下标签此刻所在网站；`Guard = { tabId, check(stage: string): Promise<void> }`，`check` 发现标签已换到别的网站时 reject（`code: 'navigated_away'`）。`stage` 只用于报错文字 |
 | `./indicator.js` | `trackCall` | `(sessionId: string, tabId?: number) => { stopped: Promise<never>, signal: AbortSignal, done(): void }` | 登记进行中的调用并让该标签显示操作指示器；用户点 Stop 时 `signal` 中止，`stopped` 以 `stoppedError()` 同类的错误（`code: 'stopped'`）reject；调用结束时必须调 `done()` |

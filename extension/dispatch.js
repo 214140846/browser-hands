@@ -1,7 +1,7 @@
 // 方法分发中枢：把 MCP 发来的 (method, params, sessionId) 路由到各工具实现，
 // 并统一处理会话登记、标签准入、操作指示器、Stop 中止与「换站」守卫。
 import { redactUrl, redactTitle } from './redact.js'
-import { beginCall, endCall, admit, resolveTabId, listTabs, joinGroup, closeSession } from './sessions.js'
+import { beginCall, endCall, admit, resolveTabId, listTabs, joinGroup, closeSession, setTask } from './sessions.js'
 import { startGuard } from './guard.js'
 import { trackCall, pointIndicator } from './indicator.js'
 import { checkAbort, abortableSleep, stoppedError } from './abort.js'
@@ -356,7 +356,7 @@ const shotAction = (isZoom) => async (c) => {
   return step(c.tabId, async () => {
     await wakeHidden(c.tabId)
     const shot = isZoom ? await zoom(c.tabId, region, scale, c.g) : await screenshot(c.tabId, scale, c.g)
-    const imageId = cacheImage(c.s?.name ?? '', shot.base64, shot.format)
+    const imageId = cacheImage(c.s?.id ?? c.s?.name ?? '', shot.base64, shot.format)
     const size = `${shot.width}x${shot.height}`
     const output = isZoom
       ? `zoom ${size} | ${imageId}`
@@ -426,7 +426,8 @@ async function computer(params, s, g, signal) {
 }
 
 // ---------- 其余工具 ----------
-async function tabsContext(_params, s) {
+async function tabsContext(params, s) {
+  if (typeof params.session_name === 'string') await setTask(s, params.session_name)
   const tabs = await listTabs(s)
   return {
     availableTabs: tabs.map((t) => {

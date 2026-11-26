@@ -2,7 +2,7 @@ const TEST_TMP = process.env.THUNDERMCP_TEST_TMP || '/tmp/thundermcp-test'
 require('node:fs').mkdirSync(TEST_TMP, { recursive: true })
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { BrowserContext } from 'playwright'
@@ -78,7 +78,7 @@ test('tabs_context_mcp 只看到本会话组里的标签', async () => {
   expect(urls).not.toContain(`http://localhost:${site.port}/two`)
   expect(t).toContain('tabId')
   const g = (await groups()).find((x) => x.id === tabGroupId)!
-  expect(g.title).toMatch(/^(⌛|✅) test-/)
+  expect(g.title).toMatch(new RegExp(`^(⌛|✅) ${basename(process.cwd())}`))
 })
 
 test('两个会话各有组，互相动标签被拒，一个断开另一个照跑', async () => {
@@ -104,7 +104,7 @@ test('两个会话各有组，互相动标签被拒，一个断开另一个照�
   expect(parse({ content: [{ text: made.content[0].text.split('\n\n')[1] }] }).availableTabs.length).toBe(2)
 
   await A.close()
-  await until(async () => (await groups()).find((g) => g.id === ca.tabGroupId)?.title?.startsWith('✅ A-'))
+  await until(async () => (await groups()).find((g) => g.id === ca.tabGroupId)?.title?.startsWith(`✅ ${basename(process.cwd())}`))
   const left = await sw().evaluate((gid) => chrome.tabs.query({ groupId: gid }), ca.tabGroupId)
   expect(left.length).toBe(2) // 标签没关
 
@@ -112,7 +112,8 @@ test('两个会话各有组，互相动标签被拒，一个断开另一个照�
   const again: any = await B.callTool({ name: 'tabs_create_mcp', arguments: {} })
   expect(again.isError).toBeFalsy()
   const bnow = (await groups()).find((g) => g.id === cb.tabGroupId)!
-  expect(bnow.title).toContain('B-')
+  expect(bnow.title).toContain(basename(process.cwd()))
+  expect(bnow.title).not.toBe((await groups()).find((g) => g.id === ca.tabGroupId)?.title)
   await B.close()
 })
 
@@ -120,7 +121,7 @@ test('组名被用户改掉会改回；组被关后下次重建', async () => {
   const C = await newClient('C')
   const c1 = parse(await C.callTool({ name: 'tabs_context_mcp', arguments: {} }))
   await sw().evaluate((gid) => chrome.tabGroups.update(gid, { title: 'hacked', color: 'grey' }), c1.tabGroupId)
-  await until(async () => (await groups()).find((g) => g.id === c1.tabGroupId)?.title?.includes('C-'))
+  await until(async () => (await groups()).find((g) => g.id === c1.tabGroupId)?.title?.includes(basename(process.cwd())))
   await sw().evaluate((t) => chrome.tabs.remove(t), c1.availableTabs[0].tabId)
   const c2 = parse(await C.callTool({ name: 'tabs_context_mcp', arguments: {} }))
   expect(c2.availableTabs.length).toBe(1)

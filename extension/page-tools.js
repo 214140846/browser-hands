@@ -309,7 +309,7 @@ export async function uploadImage(p, s, g) {
   const hasPoint = p.coordinate !== undefined && p.coordinate !== null
   if (hasRef === hasPoint) throw badParams('provide exactly one of ref or coordinate')
 
-  const image = getImage(s?.name ?? '', p.imageId)
+  const image = getImage(s?.id ?? s?.name ?? '', p.imageId)
   if (!image) throw fail('screenshot_bytes_unavailable', `No screenshot bytes for imageId ${p.imageId}`)
   checkTotal(decodedBytes(image.base64))
 
