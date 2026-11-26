@@ -85,12 +85,12 @@ export async function openSocket(path: string): Promise<Browser | null> {
 
 const pgrep = (pattern: string) =>
   new Promise<boolean>((ok) => execFile('pgrep', ['-f', pattern], (_e, stdout) => ok((stdout ?? '').trim().length > 0)))
-const chromeRunning = () => pgrep('Google Chrome|Chromium|chrome-mac')
+const chromeRunning = () => pgrep('Google Chrome|Chromium|chrome-mac|Arc\\.app/Contents/MacOS/Arc')
 // Chrome 拉起的 host：打包版 `thundermcp.mjs host` / 带插件 origin，源码版 `server/host.ts`
 const hostRunning = () => pgrep('thundermcp\\.mjs (host|chrome-extension://)|server/host\\.ts')
 
 export async function explainNoBrowser(): Promise<string> {
-  const manifests = Object.values(nativeHostDirs).filter((d) => existsSync(join(d, `${HOST_NAME}.json`)))
+  const manifests = [...new Set(Object.values(nativeHostDirs))].filter((d) => existsSync(join(d, `${HOST_NAME}.json`)))
   if (!manifests.length && !process.env.JEV_SOCKET_DIR)
     return 'Cannot reach the browser: the host manifest is not installed. Run `bun run setup` in the v2 directory, then restart Chrome.'
   if (!(await chromeRunning())) return 'Cannot reach the browser: Chrome is not running. Open Chrome (with the Browser Hands extension installed).'

@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { balanceInfo, saveSettings, settingsInfo } from './jev'
+import { launchingBrowser } from './launcher'
 import { socketDir } from './paths'
 
 const dir = socketDir()
@@ -74,6 +75,9 @@ function listen() {
   })
 }
 listen()
+
+// 第一条消息：告诉插件是哪个浏览器拉起了 host（无 id，插件不回）
+toChrome({ method: 'host_info', params: { browser: launchingBrowser() } })
 
 // 自愈：socket 文件被外部删掉（系统清理、安全软件、手动删目录）就重新监听，生成新文件
 const HEAL_INTERVAL_MS = Number(process.env.JEV_HEAL_INTERVAL_MS) || 5000

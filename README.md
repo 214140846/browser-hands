@@ -172,7 +172,7 @@ Give `file_upload` the absolute path of the file on your machine.
 To save you time, here is what Browser Hands does not cover today:
 
 - **Windows and WSL** are not supported. Linux is experimental.
-- **Brave, Arc, Edge, Vivaldi** are not tested. Google Chrome 116+ is the target.
+- **Brave, Edge, Vivaldi** are not tested. Google Chrome 116+ is the target; Arc on macOS is supported (see below).
 - **Locked-down Chrome** where Developer mode is disabled by policy: the extension is loaded unpacked, so it needs Developer mode.
 - **CAPTCHAs and anti-bot checks** are not solved or bypassed. The agent pauses and asks you.
 - **`alert` / `confirm` dialogs** are not answered automatically. Only "leave page?" prompts are handled during navigation.
@@ -383,7 +383,11 @@ These are instructions and limits, not a guarantee. Watch the agent on sites whe
 
 **Linux / Windows?** macOS is tested. The installer also runs on Linux, but that path is experimental and untested. Windows is not supported.
 
-**Other browsers?** Google Chrome 116 or later is the target. The installer also accepts `--browser chromium` and `--browser chrome-for-testing`. Edge, Brave, Arc, Firefox and Safari are not tested.
+**Other browsers?** Google Chrome 116 or later is the target. The installer also accepts `--browser chromium`, `--browser chrome-for-testing` and `--browser arc`. Edge, Brave, Firefox and Safari are not tested.
+
+**Arc (macOS)?** Run `bun run setup --browser arc` and load the extension from `arc://extensions`. Arc reads native host manifests from Chrome's directory (not from `Arc/User Data`), so the manifest goes there and is shared with Chrome. For the same reason `setup --browser arc --uninstall` keeps that file, so Chrome stays connected; `setup --browser chrome --uninstall` removes it for both. Arc has the tab-groups API but `chrome.tabs.group` never returns, so when the host sees it was launched by Arc, each session tracks its own tab ids instead of using a tab group. Sessions stay isolated; you just don't see a colored group in the sidebar. Arc's DevTools screenshot also returns no data when asked to downscale, so on Arc screenshots are captured at full size and downscaled inside the extension.
+
+**Arc profiles and spaces.** Load the extension once per Arc profile; each profile shows up as its own browser in `list_connected_browsers`. Spaces that share a profile share one copy of the extension. Arc puts a tab an extension opens into the space the window is showing at that moment, whatever profile asked for it, and the extension APIs cannot pick a space (tested: `openerTabId` and `index` make no difference; `chrome.windows.create` pops up a separate window). So keep at least one Arc window showing a space of the profile the agent works in. If every window shows another profile's space, the agent's tabs still use the right profile's cookies but appear in that other space's sidebar.
 
 ## Contributing
 

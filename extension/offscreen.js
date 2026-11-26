@@ -206,7 +206,7 @@ async function 合成(frames, opts) {
     const cv = document.createElement('canvas')
     cv.width = W
     cv.height = H
-    const ctx = cv.getContext('2d')
+    const ctx = cv.getContext('2d', { willReadFrequently: true }) // gif.js 每帧都 getImageData 读回像素
     // 只有比动画尺寸小时才补白，且只补原图之外的区域
     if (img.width < W || img.height < H) {
       ctx.fillStyle = 调色.补白

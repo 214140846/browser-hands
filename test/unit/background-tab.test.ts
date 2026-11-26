@@ -12,6 +12,8 @@ const f = makeFakes()
 ;(globalThis as any).chrome = f.chrome
 mock.module('../../extension/debugger.js', () => f.debuggerModule)
 mock.module('../../extension/sessions.js', () => f.sessionsModule)
+let browser = 'chrome'
+mock.module('../../extension/browser.js', () => ({ browserKind: async () => browser }))
 const mod = (await import('../../extension/background-tab.js')) as any
 const chromeCallsAtImport = f.state.chromeCalls
 const { withFocusEmulation, withBackground, wakeHidden, beginClickInterception, abortClickInterception, finishClickInterception, newTabNote } = mod
@@ -351,6 +353,19 @@ describe('beginClickInterception', () => {
     expect(await beginClickInterception(f.addTab(o as any).id)).toBeNull()
     expect(S.scripts).toHaveLength(0)
   })
+  test.each([
+    ['窗口正常、有焦点', { winState: 'normal', focused: true }],
+    ['窗口全屏、无焦点', { winState: 'fullscreen', focused: false }],
+  ] as const)('Arc：%s 也拦截 → 凭据', async (_n, o) => {
+    browser = 'arc'
+    try {
+      const t = f.addTab(o as any)
+      expect(await beginClickInterception(t.id)).toMatchObject({ tabId: t.id })
+      expect(S.scripts).toHaveLength(1)
+    } finally {
+      browser = 'chrome'
+    }
+  })
   test('读不到标签 / 窗口 → null', async () => {
     expect(await beginClickInterception(7777)).toBeNull()
     const t = minimizedTab()
@@ -508,6 +523,21 @@ describe('finishClickInterception', () => {
     expect(S.grouped[0].groupId).toBe(42)
     expect(groupTid(S.grouped[0])).toEqual(ids)
     expect(S.joined).toHaveLength(0)
+  })
+  test.each([['NONE', NO_GROUP], ['缺省', undefined]] as const)('清单模式会话（Arc，原标签 %s）→ joinGroup，不调 chrome 入组', async (_n, g) => {
+    const { c } = await tokenFor({ groupId: g })
+    drainGives(['https://a.test/'])
+    const session = { groupId: -1, tabIds: [1], name: 's' }
+    const ids = await finishClickInterception(c, session)
+    expect(ids).toHaveLength(1)
+    expect(S.joined).toEqual([{ session, tabId: ids[0] }])
+    expect(S.grouped).toHaveLength(0)
+  })
+  test('清单模式 joinGroup 失败 → 不计入', async () => {
+    const { c } = await tokenFor({ groupId: NO_GROUP })
+    drainGives(['https://a.test/'])
+    S.joinFails = true
+    expect(await finishClickInterception(c, { groupId: -1, tabIds: [1] })).toEqual([])
   })
   test('入组失败 → 不计入', async () => {
     const { c } = await tokenFor({ groupId: 42 })

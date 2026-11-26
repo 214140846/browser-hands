@@ -1,10 +1,10 @@
-// bun run setup（或打包后的 node thundermcp.mjs setup）[--browser chrome|chromium|chrome-for-testing] [--dir <NativeMessagingHosts 目录>] [--uninstall]
+// bun run setup（或打包后的 node thundermcp.mjs setup）[--browser chrome|chromium|chrome-for-testing|arc] [--dir <NativeMessagingHosts 目录>] [--uninstall]
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import manifest from '../extension/manifest.json'
-import { HOST_NAME, nativeHostDirs } from './paths'
+import { HOST_NAME, borrowedHostDir, nativeHostDirs } from './paths'
 
 const self = fileURLToPath(import.meta.url)
 const root = resolve(dirname(self), '..')
@@ -44,8 +44,13 @@ export function writeHostManifest(targetDir: string): string {
 
 export function main(args: string[]) {
   const opt = (n: string) => args[args.indexOf(n) + 1]
-  const dir = args.includes('--dir') ? opt('--dir') : nativeHostDirs[args.includes('--browser') ? opt('--browser') : 'chrome']
-  if (args.includes('--uninstall')) {
+  const browser = args.includes('--browser') ? opt('--browser') : 'chrome'
+  const dir = args.includes('--dir') ? opt('--dir') : nativeHostDirs[browser]
+  const owner = args.includes('--dir') ? undefined : borrowedHostDir[browser]
+  if (args.includes('--uninstall') && owner) {
+    console.log(`Kept ${join(dir, `${HOST_NAME}.json`)}: ${browser} shares this manifest with ${owner}, which may still use it.`)
+    console.log(`To remove it, run setup --browser ${owner} --uninstall (this disconnects both).`)
+  } else if (args.includes('--uninstall')) {
     rmSync(join(dir, `${HOST_NAME}.json`), { force: true })
     console.log('Removed', dir)
   } else {

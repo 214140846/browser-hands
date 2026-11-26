@@ -141,6 +141,7 @@ export function makeFakes() {
   }
 
   const sessionsModule = {
+    tracksTabIds: (session: any) => Array.isArray(session?.tabIds),
     joinGroup: async (session: any, tabId: number) => {
       state.joined.push({ session, tabId })
       if (state.joinFails) throw new Error('join failed')
