@@ -103,9 +103,15 @@ const pageText: Handler = async (c, a) => {
   return { text, tabs: { exec: r.tabId } }
 }
 
-// find：读页 → 本地关键词打分，不调任何模型
+// find：读页 → 先问插件有没有启用小模型（密钥只在插件里）；没启用就本地关键词打分
 const findHandler: Handler = async (c, a) => {
   const page = await plug(c, 'read_page', { filter: 'all', tabId: a.tabId })
+  // 旧版插件不认 find_ai（unknown_method）按未启用处理
+  const ai = await plug(c, 'find_ai', { query: a.query, pageContent: page.pageContent }).catch((e) => {
+    if (msgOf(e).startsWith('unknown_method')) return undefined
+    throw e
+  })
+  if (ai?.enabled === true) return { text: String(ai.text), tabs: { exec: page.tabId as number } }
   const f = formatFind(findLocal(parseTree(page.pageContent), a.query))
   if (!f.ok) throw new Error(`find failed: ${f.error}`)
   return { text: f.text, tabs: { exec: page.tabId as number } }

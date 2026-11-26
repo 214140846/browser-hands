@@ -199,12 +199,13 @@
 
 ## 7. `find`
 
-`find` 不把自己的名字发给插件，而是读页面后在本进程里按关键词打分，不调任何模型。
+`find` 不把自己的名字发给插件，而是读页面后：先向插件发 `find_ai`（见 `specs/find-ai.md`）问是否启用了小模型；未启用则在本进程里按关键词打分，不调任何模型。
 
 | 步骤结果（可观察） | 要求 |
 |---|---|
 | 向插件读页 | 发 `read_page`，参数为 `{ filter: 'all', tabId: 客户端给的 tabId }`（客户端没给 `tabId` 时该键值为 `undefined`，即无标签 id）；不再额外查标签清单 |
-| 页面行 | 对 `pageContent` 依次 `parseTree`、`findLocal(rows, query)`（`query` 为客户端的 `query` 参数） |
+| 小模型 | 读页后发 `find_ai`，参数 `{ query, pageContent }`。回复 `enabled: true` → 文字 = 回复的 `text`（先），后接标签块，不再本地打分；回复缺 `enabled` 或为假 → 走下一行的本地路径；插件报错 → 原样作为错误结果（不退回本地），不附标签块；插件报 `unknown_method`（旧版插件）→ 视为未启用 |
+| 页面行（未启用时） | 对 `pageContent` 依次 `parseTree`、`findLocal(rows, query)`（`query` 为客户端的 `query` 参数） |
 | 成功（`formatFind` 返回 `ok: true`） | 文字含 `formatFind` 给的 `text`（先），后接标签块（带执行所在标签） |
 | 失败（`formatFind` 返回 `ok: false`） | 结果为错误，文字含 `formatFind` 给的 `error`；前缀自定；**不附标签块** |
 | `formatFind` 的入参 | `findLocal` 返回的候选数组 |

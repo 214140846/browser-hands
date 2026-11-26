@@ -372,6 +372,29 @@ describe('find', () => {
     expect(hasTabBlock(t)).toBe(true)
     expect(t).toContain('12')
   })
+  test('插件回报启用小模型：用它的文字，不走本地打分，仍附标签块', async () => {
+    S.replies.set('find_ai', { enabled: true, text: 'AI-FOUND-TEXT' })
+    S.replies.set('read_page', { pageContent: 'TREE-X', viewport: { width: 1, height: 1 }, tabId: 12 })
+    const r = await call('find', { query: 'sign-in link', tabId: 12 })
+    expect(r.isError).toBe(false)
+    expect(S.calls.find((c) => c.method === 'find_ai')?.params).toEqual({ query: 'sign-in link', pageContent: 'TREE-X' })
+    expect(text(r)).toContain('AI-FOUND-TEXT')
+    expect(hasTabBlock(text(r))).toBe(true)
+    expect(S.findCalls).toHaveLength(0)
+  })
+  test('小模型报错：错误原样给出，不退回本地', async () => {
+    S.replies.set('find_ai', new Error('find_exception: Failed to find element: HTTP 500'))
+    const r = await call('find', { query: 'x' })
+    expect(r.isError).toBe(true)
+    expect(text(r)).toContain('Failed to find element: HTTP 500')
+    expect(S.findCalls).toHaveLength(0)
+  })
+  test('旧插件不认 find_ai：当作未启用，走本地', async () => {
+    S.replies.set('find_ai', new Error('unknown_method: no handler registered for "find_ai"'))
+    const r = await call('find', { query: 'x' })
+    expect(r.isError).toBe(false)
+    expect(text(r)).toContain('FOUND-TEXT')
+  })
   test('formatFind 失败 → 错误结果含其 error', async () => {
     S.formatResult = { ok: false, error: 'NOTHING-MATCHED' }
     const r = await call('find', { query: 'x' })

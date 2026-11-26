@@ -247,7 +247,7 @@ Any other MCP client that can start a stdio server works the same way: command `
 - **Work in sites you are already logged into.** Gmail, GitHub, Notion, Jira, admin panels, internal tools: the agent uses the session that is already in your Chrome profile. You do not give it a password, and it does not need an API integration for each site.
 - **Test your web app in a real browser.** Let your coding agent open `localhost`, click through the change it just made, read console errors (`read_console_messages`) and network requests (`read_network_requests`), and take screenshots to check the UI.
 - **Fill in forms and repeat web chores.** `find`, `form_input`, `computer` (click, type, keys, scroll) and `file_upload` cover multi-step forms. For many similar items the agent can run one script with `javascript_tool`.
-- **Read and inspect pages.** `read_page` returns the accessibility tree with element references, `get_page_text` returns the main text, `find` locates elements by description, and `javascript_tool` can query the DOM directly.
+- **Read and inspect pages.** `read_page` returns the accessibility tree with element references, `get_page_text` returns the main text, `find` locates elements by description (optional: configure an OpenAI-compatible model service in the extension settings panel to let `find` use a small model), and `javascript_tool` can query the DOM directly.
 - **See the screen.** `computer` with `screenshot` or `zoom` gives the agent an image of the tab when text is not enough.
 - **Run several tabs or agents at once.** Each agent session gets its own tab group, so parallel agents do not touch each other's tabs.
 

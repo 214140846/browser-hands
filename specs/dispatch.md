@@ -72,6 +72,7 @@
 | `./screenshot.js` | `cacheImage` | `(sessionName: string, base64: string, format: string) => string` | 缓存截图供之后 `upload_image` 取用，返回图片 id |
 | `./screenshot.js` | `beginBatch` / `endBatch` | `() => void` | 圈出 `browser_batch` 的一批调用 |
 | `./logs.js` | `readConsole` / `readNetwork` | `(params, s: Session, g?: Guard) => Promise<object>` | 两个读日志工具的实际执行 |
+| `./find-ai.js` | `findAi` | `(params: { query, pageContent }) => Promise<{ enabled: false } \| { enabled: true, text }>` | `find_ai` 方法原样委托，错误原样透传（见 `specs/find-ai.md`） |
 | `./page-tools.js` | `javascriptTool` / `fileUpload` / `uploadImage` | `(params, s: Session, g?: Guard) => Promise<object>` | 对应三个工具的实际执行 |
 | `./page-tools.js` | `resizeWindow` / `uploadStash` | `(params) => Promise<object>` | 对应两个工具的实际执行 |
 
@@ -208,7 +209,7 @@
 |---|---|---|---|
 | 页面操作类 | 标签 | 是 | `read_page`、`get_page_text`、`form_input`、`computer`、`javascript_tool`、`file_upload`、`upload_image` |
 | 导航与任务类 | 标签 | 否 | `navigate`、`jev_task_guard` |
-| 其他 | 无 | 否 | `connect_request`、`connect_cancel`、`hello`、`tabs_context_mcp`、`tabs_create_mcp`、`tabs_close_mcp`、`jev_observe`、`jev_task_release`、`gif_creator`、`batch_begin`、`batch_end`、`read_console_messages`、`read_network_requests`、`resize_window`、`upload_stash` |
+| 其他 | 无 | 否 | `connect_request`、`connect_cancel`、`hello`、`tabs_context_mcp`、`tabs_create_mcp`、`tabs_close_mcp`、`jev_observe`、`jev_task_release`、`gif_creator`、`batch_begin`、`batch_end`、`read_console_messages`、`read_network_requests`、`resize_window`、`upload_stash`、`find_ai` |
 
 各方法的行为见：`connect_*` / `hello` 第 6 节；`jev_task_*` 第 5 节；`read_page` / `get_page_text` / `form_input` 第 8 节；`computer` 第 9 节；其余第 10 节。
 
