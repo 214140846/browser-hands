@@ -76,7 +76,7 @@ These are the complaints we see most often in GitHub issues, Reddit and Hacker N
 |---|---|
 | Screenshots pile up and burn your context or usage limit | Agents are told to read the page as text first (`read_page`, `get_page_text`, `find`) and use screenshots only when text is not enough. |
 | One page dumps tens of thousands of tokens | `read_page` takes `filter: "interactive"`, `ref_id`, `depth` and `max_chars`. `get_page_text` takes `max_chars`. |
-| Every step is a separate slow tool call | `browser_batch` runs several actions in one call. For many similar items the agent can run one script with `javascript_tool`, or hand a known route to the fast `quick_task` executor. |
+| Every step is a separate slow tool call | `browser_batch` runs several actions in one call. For many similar items the agent can run one script with `javascript_tool`. |
 | The extension makes Chrome slow | Measured at 1.4% average CPU for the extension process with two agents (see [Benchmarks](#benchmarks)). |
 
 ### Hard pages
@@ -153,13 +153,13 @@ There is no site blocklist. `localhost` and `127.0.0.1` work like any other page
 You don't. The agent uses the session that is already open in your Chrome. Browser Hands never asks for or stores passwords.
 
 **"I want to bulk-update 130 listings in a web app with no API, but the agent is slow and burns tokens."**
-Let the agent learn one listing, then run one `javascript_tool` script over the rest, or hand a fixed route to `quick_task`. Text-first reading keeps each step small.
+Let the agent learn one listing, then run one `javascript_tool` script over the rest. Text-first reading keeps each step small.
 
 **"I want the agent to fill a form inside an embedded app or iframe, but typing goes nowhere."**
 Refs from `read_page` cover cross-origin iframes, and `form_input` / `computer` type into the right frame.
 
 **"I want to post on Reddit, X or LinkedIn from my own account, but I don't want the agent to press Post by itself."**
-Agents are instructed to stop before final submit and send. With `quick_task`, `stopBefore` hard-blocks named buttons such as "Post".
+Agents are instructed to stop before final submit and send.
 
 **"I want to keep working while the agent runs, but it keeps pulling Chrome to the front."**
 Clicks and typing work in background tabs and minimized windows.
@@ -186,7 +186,6 @@ To save you time, here is what Browser Hands does not cover today:
 
 - **Parallel agents without cross-talk.** Each agent session gets its own Chrome tab group and can only see and act on tabs inside it.
 - **Multiple profiles.** Install the extension in several Chrome profiles. The agent sees each profile's name and signed-in email and can switch between them.
-- **`quick_task` executor.** Hand over a route (each step plus what you expect to see) and a fast small model clicks through it, about 0.2–0.5 s per decision, handing control back when unsure. `stopBefore` hard-blocks named buttons such as "Submit" or "Pay". Needs a Typesafe or OpenRouter API key; every other tool works without one.
 - **Token-efficient by default.** Agents read the accessibility tree and page text first and fall back to screenshots only when needed. For repetitive work they are steered toward one injected script that returns compact JSON.
 - **Human in the loop.** Agents are told to stop before final submit, payment, send and delete, and to pause for you on real CAPTCHAs.
 - **GIF recording.** Record a session as a GIF for sharing, debugging or review.
@@ -247,7 +246,7 @@ Any other MCP client that can start a stdio server works the same way: command `
 
 - **Work in sites you are already logged into.** Gmail, GitHub, Notion, Jira, admin panels, internal tools: the agent uses the session that is already in your Chrome profile. You do not give it a password, and it does not need an API integration for each site.
 - **Test your web app in a real browser.** Let your coding agent open `localhost`, click through the change it just made, read console errors (`read_console_messages`) and network requests (`read_network_requests`), and take screenshots to check the UI.
-- **Fill in forms and repeat web chores.** `find`, `form_input`, `computer` (click, type, keys, scroll) and `file_upload` cover multi-step forms. For many similar items the agent can run one script with `javascript_tool`, or hand a known route to `quick_task`.
+- **Fill in forms and repeat web chores.** `find`, `form_input`, `computer` (click, type, keys, scroll) and `file_upload` cover multi-step forms. For many similar items the agent can run one script with `javascript_tool`.
 - **Read and inspect pages.** `read_page` returns the accessibility tree with element references, `get_page_text` returns the main text, `find` locates elements by description, and `javascript_tool` can query the DOM directly.
 - **See the screen.** `computer` with `screenshot` or `zoom` gives the agent an image of the tab when text is not enough.
 - **Run several tabs or agents at once.** Each agent session gets its own tab group, so parallel agents do not touch each other's tabs.
@@ -291,8 +290,6 @@ graph TD
 | Tool | What it does |
 |---|---|
 | `browser_batch` | Run several simple actions in one call. |
-| `quick_find` / `quick_check` | Ask the fast model to locate an element or check a statement about the page. |
-| `quick_task`, `quick_task_status`, `quick_task_result`, `quick_task_stop` | Run a known route with the fast executor in the background. |
 | `list_connected_browsers`, `select_browser`, `switch_browser` | See every connected Chrome profile (name and email) and choose which one to drive. |
 
 ## Benchmarks
@@ -315,7 +312,7 @@ graph TD
 | Claude Opus | 112 s | $0.79 |
 | Claude Haiku | 87–100 s | **$0.03–0.05** (about 4–5% of Opus) |
 
-Text-first reads and script batching are what let a small model finish the whole flow.
+Text-first reads and script batching keep each step small.
 
 ### Parallel reliability
 3 agents ran the full flow at the same time in one Chrome: all finished in **116–135 s**, with **0** actions on the wrong tab.
@@ -365,7 +362,6 @@ Treat it like giving a person your unlocked laptop: the agent can do what you ca
 - The MCP server and the extension talk through Chrome native messaging and a local Unix socket in a folder only your user can read. There is no network port, so other web pages cannot reach it.
 - Each agent only sees the tabs in its own tab group.
 - Agents are told to stop and ask before final submit, payment, send and delete, and to hand CAPTCHAs to you.
-- `quick_task` can hard-block named buttons with `stopBefore`.
 - The popup lists active sessions and has a **Stop all** button.
 - The code is open source, so you can read what it does.
 
@@ -373,13 +369,13 @@ These are instructions and limits, not a guarantee. Watch the agent on sites whe
 
 **Will my Claude in Chrome prompts work?** Mostly. The 16 shared tools take the same names and arguments; behaviour and output text are Browser Hands's own.
 
-**Does anything go to the cloud?** No. Agent, local MCP server, your Chrome. Only the `quick_*` tools call the small-model API you configure.
+**Does anything go to the cloud?** No. Agent, local MCP server, your Chrome.
 
-**Will it click "Pay" or "Submit" on its own?** Agents are instructed to stop before final submit, payment, send and delete, and `stopBefore` lets you hard-block named buttons in `quick_task`.
+**Will it click "Pay" or "Submit" on its own?** Agents are instructed to stop before final submit, payment, send and delete.
 
 **CAPTCHAs?** It does not solve them. It pauses and asks you to.
 
-**Is it free and open source?** Yes. MIT license. The `quick_*` tools need your own Typesafe or OpenRouter API key. Every other tool is free to use.
+**Is it free and open source?** Yes. MIT license. Every tool is free to use.
 
 **Linux / Windows?** macOS is tested. The installer also runs on Linux, but that path is experimental and untested. Windows is not supported.
 

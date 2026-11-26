@@ -1,6 +1,6 @@
 # mcp 模块规格（server 端入口）
 
-本模块是 MCP 服务器的入口：启动时注册一组浏览器操作工具，通过标准输入输出与 MCP 客户端（Agent）说话；每次工具调用选定一个在线浏览器，把调用转给该浏览器里的插件，再把插件返回的东西整理成文本（外加图片）交给客户端。另有三个管理多浏览器的工具、一组「快速小模型」工具（找元素 / 判断页面真假 / 多步任务）和一个把多项调用打包顺序执行的批处理工具。
+本模块是 MCP 服务器的入口：启动时注册一组浏览器操作工具，通过标准输入输出与 MCP 客户端（Agent）说话；每次工具调用选定一个在线浏览器，把调用转给该浏览器里的插件，再把插件返回的东西整理成文本（外加图片）交给客户端。另有三个管理多浏览器的工具和一个把多项调用打包顺序执行的批处理工具。
 
 对外接口 = 工具名、参数名 / 类型 / 必填性 / 取值范围、错误码、转发行为。工具和参数的 description 文案、服务器说明文案**全部自定**，本规格不给也不冻结。
 
@@ -12,7 +12,7 @@
 |---|---|
 | 创建 MCP 服务器 | 对客户端报告的服务器名为 `thundermcp`；版本号自定 |
 | 服务器说明（instructions） | 取自同目录的说明文本文件，整份下发；文件开头若有一行 HTML 注释（`<!-- ... -->` 独占首行），该行不下发。下发的说明为非空字符串，且不以 `<!--` 开头。内容自定 |
-| 注册工具 | 恰好 26 个，见第 3 节 |
+| 注册工具 | 恰好 20 个，见第 3 节 |
 | 连上标准输入输出传输 | 导入时同步等待连接完成（顶层 await）；用的是 SDK 的标准输入输出服务器传输 |
 | 监听标准输入关闭 | 对 `process.stdin` 挂一个 `close` 监听：触发时以退出码 0 结束进程（父进程退出后不留孤儿进程） |
 
@@ -34,17 +34,9 @@
 | `./registry` | `describe` | `() => string` | 在线浏览器的文字列表 |
 | `./registry` | `select` | `(deviceId: string) => void` | 选定浏览器；deviceId 不在线时同步抛 `Error` |
 | `./registry` | `switchBrowser` | `(timeoutMs: number) => Promise<unknown \| null>` | 让用户在浏览器里点连接；超时返回 `null`，否则返回被选中的浏览器 |
-| `./jev` | `getJev` | `() => Promise<Jev>` | 取小模型接口对象（不透明，本模块只把它转交给 `rank` / `check` / `startJevTask`） |
-| `./jev-task` | `startJevTask` | `(conn: Conn, sessionId: string, params: object, jev: Jev) => Promise<object>` | 启动 / 运行小模型多步任务，返回可 JSON 化的对象 |
-| `./jev-task` | `jevStatus` | `(taskId: string) => object`，同步 | 后台任务进度 |
-| `./jev-task` | `jevResult` | `(taskId: string) => object`，同步 | 后台任务结果 |
-| `./jev-task` | `jevStop` | `(taskId: string) => Promise<object>` | 停后台任务 |
-| `./jev-tools` | `parseTree` | `(pageContent: string) => rows` | 把无障碍树文本解析成行 |
-| `./jev-tools` | `prefilter` | `(rows, query: string) => rows` | 按描述预筛行 |
-| `./jev-tools` | `rank` | `(jev: Jev, o: { description: string, rows, url: string, title: string }) => Promise<ranked>` | 小模型排序；`ranked` 含 `candidates` 与 `none` |
-| `./jev-tools` | `formatFind` | `(candidates, none) => { ok: true, text: string } \| { ok: false, error: string }` | 把候选格式化成给客户端看的文字，或给出找不到的原因 |
-| `./jev-tools` | `jevFindJson` | `(ranked) => object` | 把排序结果转成 JSON 对象 |
-| `./jev-tools` | `check` | `(jev: Jev, o: { statement: string, url: string, title: string, text: string }) => Promise<{ p: number, cost: number, model?: string }>` | 小模型判断陈述为真的概率 |
+| `./find-local` | `parseTree` | `(pageContent: string) => rows` | 把无障碍树文本解析成行 |
+| `./find-local` | `findLocal` | `(rows, query: string) => candidates` | 本地关键词打分，返回候选（`ref`、`role`、`label`、`p`），不调任何模型 |
+| `./find-local` | `formatFind` | `(candidates) => { ok: true, text: string } \| { ok: false, error: string }` | 把候选格式化成给客户端看的文字，或给出找不到的原因 |
 | `./output` | `makeHinter` | `() => { note(method: string, params: unknown, isError: boolean): string \| undefined }` | 返回「附加提醒」文字；空串 / `undefined` 表示无提醒 |
 | `./output` | `truncateOutput` | `(text: string) => string` | 把过长文字截到输出预算内 |
 | `../extension/redact.js` | `escapeJson` | `(text: string) => string` | 把 JSON 文本转成可安全放进文字的形式 |
@@ -71,7 +63,7 @@
 
 ## 3. 工具与参数（冻结）
 
-恰好 26 个工具。下表「必填」之外的参数都可选。类型写 JSON Schema 语义；数组长度、数值范围是 schema 的一部分，越界调用必须被拒（见 5.1）。**每个工具必须有非空字符串的 description；每个参数的 description 自定，可有可无。**
+恰好 20 个工具。下表「必填」之外的参数都可选。类型写 JSON Schema 语义；数组长度、数值范围是 schema 的一部分，越界调用必须被拒（见 5.1）。**每个工具必须有非空字符串的 description；每个参数的 description 自定，可有可无。**
 
 | 工具 | 参数（类型；约束） | 必填 |
 |---|---|---|
@@ -82,12 +74,6 @@
 | `get_page_text` | `tabId`: number；`max_chars`: number | 无 |
 | `computer` | `action`: 枚举 `left_click` `right_click` `type` `screenshot` `wait` `scroll` `key` `left_click_drag` `double_click` `triple_click` `zoom` `scroll_to` `hover`；`coordinate`: number[]，长度恰为 2；`text`: string；`duration`: number，0 ≤ 值 ≤ 30；`scroll_direction`: 枚举 `up` `down` `left` `right`；`scroll_amount`: number，1 ≤ 值 ≤ 30；`start_coordinate`: number[]，长度恰为 2；`region`: number[]，长度恰为 4；`scale`: number（无范围约束）；`repeat`: number，1 ≤ 值 ≤ 100；`ref`: string；`modifiers`: string；`tabId`: number | `action`、`tabId` |
 | `find` | `query`: string；`tabId`: number | `query` |
-| `quick_find` | `description`: string；`tabId`: number | `description` |
-| `quick_check` | `statement`: string；`tabId`: number | `statement` |
-| `quick_task` | `goal`: string；`url`: string；`details`: string；`allowIrreversible`: boolean；`stopBefore`: string[]；`tabId`: number；`background`: boolean | `goal` |
-| `quick_task_status` | `taskId`: string | `taskId` |
-| `quick_task_result` | `taskId`: string | `taskId` |
-| `quick_task_stop` | `taskId`: string | `taskId` |
 | `form_input` | `ref`: string；`value`: string \| boolean \| number 三选一；`tabId`: number | `ref`、`value`、`tabId` |
 | `navigate` | `url`: string；`tabId`: number；`force`: boolean | `url`、`tabId` |
 | `browser_batch` | `actions`: 数组，元素是对象 `{ name: string, input: 对象（键为字符串、值任意） }`，元素内 `name`、`input` 都必填 | `actions` |
@@ -115,24 +101,13 @@
 | 标签管理 | `tabs_context_mcp` `tabs_create_mcp` `tabs_close_mcp` | 6.1 |
 | 读页面 | `read_page` `get_page_text` | 6.2 |
 | 带 `output` 的动作 | `computer`（可带图）、`form_input` `navigate` `javascript_tool` `resize_window` `read_console_messages` `read_network_requests` `file_upload` `upload_image` `gif_creator` | 6.3 |
-| 小模型 | `find` `quick_find` `quick_check` | 7 |
-| 小模型任务 | `quick_task` `quick_task_status` `quick_task_result` `quick_task_stop` | 6.4 |
+| 本地查找 | `find` | 7 |
 | 批处理 | `browser_batch` | 8 |
 | 浏览器管理 | `list_connected_browsers` `select_browser` `switch_browser` | 9 |
 
 除第 9 节三个工具外，**所有工具**都走同一条通用流程（第 5 节：选浏览器、会话标识、协议版本提醒、脱敏、截断、提示器、错误处理）。
 
-提示器（`makeHinter().note`）收到的第一个参数是**内部方法名**，与对外工具名的对应是冻结的：
-
-| 对外工具名 | 提示器收到的方法名 |
-|---|---|
-| `quick_find` | `jev_find` |
-| `quick_check` | `jev_check` |
-| `quick_task` | `jev_task` |
-| `quick_task_status` | `jev_status` |
-| `quick_task_result` | `jev_result` |
-| `quick_task_stop` | `jev_stop` |
-| 其余工具 | 与对外工具名相同 |
+提示器（`makeHinter().note`）收到的第一个参数是对外工具名。
 
 第二个参数是经 schema 解析后的该次调用参数，第三个是本次结果是否为错误（布尔）。
 
@@ -145,7 +120,7 @@
 | 选浏览器之前 | `refresh()` 已完成（`refresh` 在 `pick` 之前被调用并等待） |
 | `pick` 返回 `none: true` | 结果为错误（`isError: true`），文字为 `explainNoBrowser()` 的返回；不发任何 `conn.call` |
 | `pick` 返回 `error` | 结果为错误，文字为该 `error`；不发任何 `conn.call` |
-| `pick` 返回浏览器 | 用该浏览器执行；`quick_task_status` / `quick_task_result` / `quick_task_stop` 也要先选到浏览器，没有在线浏览器时同样报错 |
+| `pick` 返回浏览器 | 用该浏览器执行 |
 
 上面两种选浏览器失败的结果同样要过提示器和截断：提示器被问的参数是内部方法名、**解析后的**调用参数、`isError` 为真；是否脱敏不约束。
 
@@ -153,7 +128,7 @@
 
 - 在第一次**成功选到浏览器**的调用里确定，之后整个进程保持不变（没选到浏览器的调用不确定它）。
 - 形态：MCP 客户端在初始化握手里自报的名字 + `-` + 非空后缀；客户端没报名字时名字部分用 `agent`。后缀的字符集与长度自定，但要足以区分同名客户端的不同进程。
-- 本模块对插件的**每一次** `conn.call`（含标签上下文查询、批处理开关、分段存放、`find` / `quick_task` 内部读树与标签查询）和传给 `startJevTask` 的会话参数都是这同一个标识；内部查询的次数与时机不约束。
+- 本模块对插件的**每一次** `conn.call`（含标签上下文查询、批处理开关、分段存放、`find` 内部读树）都是这同一个标识；内部查询的次数与时机不约束。
 
 ### 5.3 协议版本提醒
 
@@ -222,48 +197,17 @@
 
 `output` 非字符串时的呈现不约束。
 
-### 6.4 小模型任务
+## 7. `find`
 
-| 工具 | 结果 |
-|---|---|
-| `quick_task` | 先 `getJev()`，调 `startJevTask(conn, 会话标识, 解析后的参数, jev)`；文字**首行**是其返回值的 JSON（单行），后接标签块（无「执行所在标签」） |
-| `quick_task_status` | 文字就是 `jevStatus(taskId)` 返回值的 JSON，无标签块 |
-| `quick_task_result` | 同上，用 `jevResult(taskId)` |
-| `quick_task_stop` | 等 `jevStop(taskId)` 完成，文字是其返回值的 JSON，无标签块 |
-
-「JSON」指 `JSON.stringify` 的结果；测试用 `JSON.parse` 还原后深比较。
-
-## 7. `find` / `quick_find` / `quick_check`
-
-三者都不把自己的名字发给插件，而是读页面后在本进程里用小模型处理。
-
-### 7.1 `find` 与 `quick_find`
-
-本节数据流的来由：测试依赖替身，靠替身可观察到入参与出参。
-
-两者读页面的方式相同；差别是描述来源和输出。描述：`find` 取参数 `query`，`quick_find` 取参数 `description`。
+`find` 不把自己的名字发给插件，而是读页面后在本进程里按关键词打分，不调任何模型。
 
 | 步骤结果（可观察） | 要求 |
 |---|---|
-| 向插件读页 | 发 `read_page`，参数为 `{ filter: 'all', tabId: 客户端给的 tabId }`（客户端没给 `tabId` 时该键值为 `undefined`，即无标签 id）；另需用 `tabs_context_mcp` 查标签以取得该页的网址与标题 |
-| 页面行 | 对 `pageContent` 依次 `parseTree`、`prefilter(rows, 描述)`，结果连同 `getJev()` 的对象交给 `rank`，`rank` 收到的 `description`、`url`、`title`：描述为上面取得的描述；`url` / `title` 为标签清单中 `tabId` 等于 `read_page` 返回 `tabId` 的那个标签的网址 / 标题，找不到该标签时两者均为空串 |
-| `quick_find` 成功 | 文字**首行**是 `jevFindJson(ranked)` 的 JSON，后接标签块（带执行所在标签）。「没找到」也算成功，不报错 |
-| `find` 成功（`formatFind` 返回 `ok: true`） | 文字含 `formatFind` 给的 `text`（先），后接标签块（带执行所在标签） |
-| `find` 失败（`formatFind` 返回 `ok: false`） | 结果为错误，文字含 `formatFind` 给的 `error`；前缀自定；**不附标签块** |
-| `formatFind` 的入参 | `ranked.candidates` 与 `ranked.none` |
-
-### 7.2 `quick_check`
-
-本节数据流的来由：测试依赖替身，靠替身可观察到入参与出参。
-
-| 情形 | 结果 |
-|---|---|
-| 正常 | 向插件发 `get_page_text`，参数为 `{ tabId: 客户端给的值, max_chars: 20000 }`；用返回的 `url`、`title`、`text` 加客户端的 `statement` 调 `check(jev, ...)` |
-| `get_page_text` 失败，且错误 message 含 `get_page_text_no_content`（页面几乎没文字） | 改为发 `read_page`（`{ filter: 'all', tabId }`）取 `pageContent` 当正文，网址 / 标题从 `tabs_context_mcp` 的标签清单里按返回 `tabId` 查，查不到为空串 |
-| `get_page_text` 因其他原因失败 | 错误照常变成 `isError` 结果，不退回 `read_page` |
-| 成功结果 | 文字**首行**是单行 JSON，含键：`probability_true`（`check` 返回 `p` 四舍五入到 3 位小数）、`url`、`title`、`cost_usd`（`cost` 四舍五入到 6 位小数）、`model`（`check` 返回的 `model`）；后接标签块（带执行所在标签） |
-
-常量来由：`max_chars: 20000` 项目自定，足够判断一句话又不让判断请求过大。3 位 / 6 位小数项目自定，对应概率 0.1% 精度与百万分之一美元精度。
+| 向插件读页 | 发 `read_page`，参数为 `{ filter: 'all', tabId: 客户端给的 tabId }`（客户端没给 `tabId` 时该键值为 `undefined`，即无标签 id）；不再额外查标签清单 |
+| 页面行 | 对 `pageContent` 依次 `parseTree`、`findLocal(rows, query)`（`query` 为客户端的 `query` 参数） |
+| 成功（`formatFind` 返回 `ok: true`） | 文字含 `formatFind` 给的 `text`（先），后接标签块（带执行所在标签） |
+| 失败（`formatFind` 返回 `ok: false`） | 结果为错误，文字含 `formatFind` 给的 `error`；前缀自定；**不附标签块** |
+| `formatFind` 的入参 | `findLocal` 返回的候选数组 |
 
 ## 8. `browser_batch`
 
@@ -271,7 +215,7 @@
 
 ### 8.1 允许的项
 
-每项是 `{ name, input }`。`name` 可用：`tabs_context_mcp` `tabs_create_mcp` `tabs_close_mcp` `read_page` `get_page_text` `computer` `find` `quick_find` `quick_check` `form_input` `navigate` `javascript_tool` `resize_window` `read_console_messages` `read_network_requests` `file_upload` `upload_image` `gif_creator`，以及三个别名 `tabs_context` `tabs_create` `tabs_close`（等价于对应的 `_mcp` 名）。
+每项是 `{ name, input }`。`name` 可用：`tabs_context_mcp` `tabs_create_mcp` `tabs_close_mcp` `read_page` `get_page_text` `computer` `find` `form_input` `navigate` `javascript_tool` `resize_window` `read_console_messages` `read_network_requests` `file_upload` `upload_image` `gif_creator`，以及三个别名 `tabs_context` `tabs_create` `tabs_close`（等价于对应的 `_mcp` 名）。
 
 ### 8.2 参数校验
 
@@ -281,7 +225,7 @@
 |---|---|
 | `actions` 为空数组 | 错误码 `batch_invalid_input` |
 | 某项 `name` 是 `browser_batch`（嵌套） | 错误码 `batch_invalid_input` |
-| 某项 `name` 不在 8.1 的名单里（包括 `quick_task` 系列、`list_connected_browsers`、`select_browser`、`switch_browser`、任何未知名） | 错误码 `batch_invalid_input` |
+| 某项 `name` 不在 8.1 的名单里（包括 `list_connected_browsers`、`select_browser`、`switch_browser`、任何未知名） | 错误码 `batch_invalid_input` |
 | 某项 `input` 不是对象 / 缺 `name` 或 `input` / `actions` 不是数组 | 被 schema 拒绝（见 3.1），形态不约束 |
 
 多项同时不合法时报哪一项不约束。校验全部在执行任何一项之前完成。注意：选浏览器（5.1）先于这些校验，没有在线浏览器时报的是选浏览器的错。
@@ -291,7 +235,7 @@
 | 情形 | 结果 |
 |---|---|
 | 开始 | 先向插件发 `batch_begin`（`{}`） |
-| 每项 | 按顺序执行，每项的处理与它作为独立工具调用时一致（包括 `file_upload` 的分段、`quick_find` / `quick_check` / `find` 的小模型流程），区别是：**项内不附标签块**（含 `tabs_context_mcp` 项本身：它在批内没有标签块文字） |
+| 每项 | 按顺序执行，每项的处理与它作为独立工具调用时一致（包括 `file_upload` 的分段、`find` 的本地查找流程），区别是：**项内不附标签块**（含 `tabs_context_mcp` 项本身：它在批内没有标签块文字） |
 | 一项成功 | 结果里加一个文字块，含该项的输出文字（可去首尾空白；块的排版、是否带序号 / 工具名自定）；该项若产生图片（`computer`），图片块紧跟在这个文字块之后 |
 | 一项抛错 | 加一个文字块，含该项错误的 message 和「后面还有几项没执行」的十进制数（0 也要写），之后**停止**，剩余项不执行；整个结果 `isError: true`。该文字块里除「未执行条数」外不得出现其他独立数字（以 `\b` 单词边界计） |
 | 结束 | 无论全部成功还是中途出错，都向插件发 `batch_end`（`{}`）；`batch_end` 自身失败被忽略。批结束后（成功或出错），后续独立调用恢复附标签块 |

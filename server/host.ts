@@ -2,7 +2,6 @@
 import { chmodSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
-import { balanceInfo, saveSettings, settingsInfo } from './jev'
 import { launchingBrowser } from './launcher'
 import { socketDir } from './paths'
 
@@ -94,20 +93,6 @@ process.stdin.on('data', (chunk: Buffer) => {
     if (inbuf.length < 4 + len) break
     const msg = JSON.parse(inbuf.subarray(4, 4 + len).toString('utf8'))
     inbuf = inbuf.subarray(4 + len)
-    if (msg.method === 'jev_balance') {
-      // 插件（状态小窗）问余额：host 自己读配置查，不经 MCP
-      balanceInfo().then((result) => toChrome({ id: msg.id, result }))
-      continue
-    }
-    if (msg.method === 'jev_settings_get' || msg.method === 'jev_settings_set') {
-      // 设置页读 / 写 Jev 模型来源：key 只进不出
-      try {
-        toChrome({ id: msg.id, result: msg.method === 'jev_settings_get' ? settingsInfo() : saveSettings(msg.params ?? {}) })
-      } catch (e: any) {
-        toChrome({ id: msg.id, result: { error: String(e.message) } })
-      }
-      continue
-    }
     const p = pending.get(msg.id)
     if (!p) continue
     if (msg.event === undefined) pending.delete(msg.id)

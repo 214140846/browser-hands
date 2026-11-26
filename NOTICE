@@ -10,8 +10,8 @@ This product includes third-party code under the following licenses.
    Licensed under the MIT License.
 
 ------------------------------------------------------------------------------
-2. Jev Browser Control (server/jev.ts, server/jev-task.ts, server/jev-tools.ts
-   derive from its extension/lib)
+2. Jev Browser Control (portions of this code base derive from its
+   extension/lib)
    Copyright (c) 2026 Jeroen Erne
    Licensed under the MIT License.
 
@@ -43,5 +43,5 @@ MIT License text for items 1-3:
   SOFTWARE.
 
 ------------------------------------------------------------------------------
-Jev is a model by TypeSafe. Browser Hands is an independent project and is not
-affiliated with, endorsed by, or sponsored by TypeSafe, Browser Use, or Anthropic.
+Browser Hands is an independent project and is not affiliated with, endorsed
+by, or sponsored by Browser Use or Anthropic.

@@ -29,14 +29,6 @@ function render({ sessions }) {
   stopAll.disabled = !sessions.some((s) => s.running > 0)
 }
 
-// 余额：打开时问一次（经后台问 host，host 读 MCP 那边的配置查），不轮询
-async function showBalance() {
-  const el = document.getElementById('balance')
-  const r = await chrome.runtime.sendMessage({ type: 'getBalance' })
-  el.textContent = !r ? 'Model balance: unavailable (host not connected)' : !r.configured ? 'Model balance: not configured' : r.balance === null ? 'Model balance: unavailable' : `Model balance: $${r.balance.toFixed(4)}`
-}
-showBalance()
-
 const refresh = async () => render(await chrome.runtime.sendMessage({ type: 'getStatus' }))
 stopAll.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'stopAll' })

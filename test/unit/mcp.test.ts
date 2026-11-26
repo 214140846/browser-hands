@@ -14,9 +14,7 @@ mock.module('@modelcontextprotocol/sdk/server/stdio.js', () => f.modules.stdio)
 mock.module('../../server/paths', () => f.modules.paths)
 mock.module('../../server/browsers', () => f.modules.browsers)
 mock.module('../../server/registry', () => f.modules.registry)
-mock.module('../../server/jev', () => f.modules.jev)
-mock.module('../../server/jev-task', () => f.modules.jevTask)
-mock.module('../../server/jev-tools', () => f.modules.jevTools)
+mock.module('../../server/find-local', () => f.modules.findLocal)
 mock.module('../../server/output', () => f.modules.output)
 mock.module('../../extension/redact.js', () => f.modules.redact)
 
@@ -125,12 +123,6 @@ const EXPECT: Record<string, { props: Record<string, any>; required: string[] }>
     required: ['action', 'tabId'],
   },
   find: { props: { query: STR, tabId: NUM }, required: ['query'] },
-  quick_find: { props: { description: STR, tabId: NUM }, required: ['description'] },
-  quick_check: { props: { statement: STR, tabId: NUM }, required: ['statement'] },
-  quick_task: { props: { goal: STR, url: STR, details: STR, allowIrreversible: BOOL, stopBefore: { type: 'array', items: STR }, tabId: NUM, background: BOOL }, required: ['goal'] },
-  quick_task_status: { props: { taskId: STR }, required: ['taskId'] },
-  quick_task_result: { props: { taskId: STR }, required: ['taskId'] },
-  quick_task_stop: { props: { taskId: STR }, required: ['taskId'] },
   form_input: { props: { ref: STR, value: { type: ['string', 'boolean', 'number'] }, tabId: NUM }, required: ['ref', 'value', 'tabId'] },
   navigate: { props: { url: STR, tabId: NUM, force: BOOL }, required: ['url', 'tabId'] },
   browser_batch: { props: { actions: { type: 'array', items: { type: 'object', required: ['name', 'input'], props: { name: STR, input: { type: 'object' } } } } }, required: ['actions'] },
@@ -174,9 +166,9 @@ const shape = (s: any): any => {
 }
 
 describe('工具清单与 schema', () => {
-  test('恰好 26 个工具，名字一一对应', () => {
+  test('恰好 20 个工具，名字一一对应', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(Object.keys(EXPECT).sort())
-    expect(tools.length).toBe(26)
+    expect(tools.length).toBe(20)
   })
   test('每个工具的 description 是非空字符串', () => {
     for (const t of tools) {
@@ -236,8 +228,6 @@ describe('参数不合法被拒，且不触发任何转发', () => {
     ['javascript_tool', { action: 'x', tabId: 1 }],
     ['tabs_close_mcp', {}],
     ['gif_creator', { action: 'export', tabId: 1, options: { quality: 'hi' } }],
-    ['quick_task', { goal: 'g', stopBefore: [1] }],
-    ['quick_task_status', {}],
     ['select_browser', {}],
     ['browser_batch', { actions: [{ name: 'computer' }] }],
     ['browser_batch', {}],
@@ -364,148 +354,36 @@ describe('带 output 的动作', () => {
   })
 })
 
-describe('小模型任务', () => {
-  test('quick_task：getJev + startJevTask(conn, 会话标识, 参数, jev)，首行 JSON + 标签块', async () => {
-    const args = { goal: 'do it', url: 'x.test', details: 'd', allowIrreversible: true, stopBefore: ['Submit'], tabId: 3, background: false }
-    const r = await call('quick_task', args)
-    expect(r.isError).toBe(false)
-    expect(S.taskStarts.length).toBe(1)
-    const st = S.taskStarts[0]
-    expect(st.conn).toBe(f.conn)
-    expect(st.params).toEqual(args)
-    expect(st.jev).toBe(S.jev)
-    expect(st.sid).toBe(S.calls.find((c) => c.method === 'tabs_context_mcp')!.sid)
-    const t = text(r)
-    expect(firstLineJson(t)).toEqual(S.taskStartResult)
-    expect(hasTabBlock(t)).toBe(true)
-    expect(methods()).not.toContain('quick_task')
-    expect(methods()).not.toContain('jev_task')
-  })
-  test('quick_task 只给必填参数：参数里没有多余键', async () => {
-    await call('quick_task', { goal: 'g' })
-    expect(S.taskStarts[0].params).toEqual({ goal: 'g' })
-  })
-  test('quick_task_status / result：整段文字就是 JSON，无标签块，不发插件调用', async () => {
-    const a = await call('quick_task_status', { taskId: 'abc' })
-    expect(JSON.parse(text(a))).toEqual(S.taskStatus)
-    const b = await call('quick_task_result', { taskId: 'abc' })
-    expect(JSON.parse(text(b))).toEqual(S.taskResult)
-    expect(S.taskCalls).toEqual([
-      { fn: 'status', id: 'abc' },
-      { fn: 'result', id: 'abc' },
-    ])
-    expect(S.calls.length).toBe(0)
-  })
-  test('quick_task_stop：等 jevStop 完成后返回其 JSON', async () => {
-    const r = await call('quick_task_stop', { taskId: 'zz' })
-    expect(JSON.parse(text(r))).toEqual(S.taskStop)
-    expect(S.taskCalls).toEqual([{ fn: 'stop', id: 'zz' }])
-  })
-  test('status / result / stop 也要先选到浏览器', async () => {
-    S.pickResult = { error: '', none: true }
-    for (const n of ['quick_task_status', 'quick_task_result', 'quick_task_stop']) {
-      const r = await call(n, { taskId: 't' })
-      expect(r.isError).toBe(true)
-      expect(text(r)).toContain(S.noBrowserText)
-    }
-    expect(S.taskCalls.length).toBe(0)
-  })
-})
-
-describe('find / quick_find', () => {
-  test('quick_find：读树（filter all）+ 查标签；rank 收到描述 / 网址 / 标题；首行为 jevFindJson', async () => {
+describe('find', () => {
+  test('读树（filter all），本地打分；成功文字含 formatFind 的 text，在标签块之前', async () => {
     S.replies.set('read_page', { pageContent: 'TREE-X', viewport: { width: 1, height: 1 }, tabId: 12 })
-    const r = await call('quick_find', { description: 'the search box', tabId: 12 })
+    const r = await call('find', { query: 'sign-in link', tabId: 12 })
     expect(r.isError).toBe(false)
     expect(S.calls[0]).toMatchObject({ method: 'read_page', params: { filter: 'all', tabId: 12 } })
-    expect(methods()).toContain('tabs_context_mcp')
     expect(methods()).not.toContain('find')
-    expect(methods()).not.toContain('quick_find')
-    expect(methods()).not.toContain('jev_find')
     expect(S.parseCalls).toEqual(['TREE-X'])
-    expect(S.prefilterCalls[0].query).toBe('the search box')
-    const rk = S.rankCalls[0]
-    expect(rk.jev).toBe(S.jev)
-    expect(rk.opts.description).toBe('the search box')
-    expect(rk.opts.url).toBe('https://beta.test/')
-    expect(rk.opts.title).toBe('Beta page')
-    expect(rk.opts.rows).toEqual([{ ref: 'row', role: 'r', name: 'n', line: 'TREE-X' }, { prefiltered: true }])
-    const t = text(r)
-    expect(firstLineJson(t)).toEqual(S.findJson)
-    expect(hasTabBlock(t)).toBe(true)
-    expect(t).toContain('12')
-  })
-  test('quick_find：标签清单里没有该标签时 url / title 为空串；没找到也不报错', async () => {
-    S.replies.set('read_page', { pageContent: 'T', viewport: { width: 1, height: 1 }, tabId: 999 })
-    S.rankResult = { candidates: [], none: 1 }
-    S.findJson = { candidates: [], none: 1 }
-    const r = await call('quick_find', { description: 'x' })
-    expect(r.isError).toBe(false)
-    expect(S.rankCalls[0].opts.url).toBe('')
-    expect(S.rankCalls[0].opts.title).toBe('')
-    expect(firstLineJson(text(r))).toEqual({ candidates: [], none: 1 })
-  })
-  test('find：query 当描述；成功文字含 formatFind 的 text，在标签块之前', async () => {
-    const r = await call('find', { query: 'sign-in link', tabId: 11 })
-    expect(r.isError).toBe(false)
-    expect(S.rankCalls[0].opts.description).toBe('sign-in link')
-    expect(S.formatCalls[0]).toEqual({ cands: S.rankResult.candidates, none: S.rankResult.none })
+    expect(S.findCalls[0].query).toBe('sign-in link')
+    expect(S.findCalls[0].rows).toEqual([{ ref: 'row', role: 'r', name: 'n', line: 'TREE-X' }])
+    expect(S.formatCalls[0]).toEqual({ cands: S.findResult })
     const t = text(r)
     expect(t).toContain('FOUND-TEXT')
     expect(t.indexOf('FOUND-TEXT')).toBeLessThan(t.indexOf('Alpha page'))
     expect(hasTabBlock(t)).toBe(true)
+    expect(t).toContain('12')
   })
-  test('find：formatFind 失败 → 错误结果含其 error', async () => {
+  test('formatFind 失败 → 错误结果含其 error', async () => {
     S.formatResult = { ok: false, error: 'NOTHING-MATCHED' }
     const r = await call('find', { query: 'x' })
     expect(r.isError).toBe(true)
     expect(text(r)).toContain('NOTHING-MATCHED')
     expect(text(r)).not.toContain('Alpha page')
   })
-  test('find：没给 tabId 时读树参数里 tabId 为空', async () => {
+  test('没给 tabId 时读树参数里 tabId 为空；不查标签清单', async () => {
     await call('find', { query: 'x' })
     expect(S.calls[0].method).toBe('read_page')
     expect(S.calls[0].params.filter).toBe('all')
     expect(S.calls[0].params.tabId).toBeUndefined()
-  })
-})
-
-describe('quick_check', () => {
-  test('正常：get_page_text(max_chars 20000)，check 入参，结果首行 JSON（3 位 / 6 位小数）', async () => {
-    S.replies.set('get_page_text', { title: 'Cart', url: 'https://shop.test/c', source: 'main', text: 'two items', tabId: 11 })
-    const r = await call('quick_check', { statement: 'cart has 2 items', tabId: 11 })
-    expect(r.isError).toBe(false)
-    expect(S.calls[0]).toMatchObject({ method: 'get_page_text', params: { tabId: 11, max_chars: 20000 } })
-    expect(S.checkCalls[0].jev).toBe(S.jev)
-    expect(S.checkCalls[0].opts).toEqual({ statement: 'cart has 2 items', url: 'https://shop.test/c', title: 'Cart', text: 'two items' })
-    const t = text(r)
-    expect(firstLineJson(t)).toEqual({ probability_true: 0.123, url: 'https://shop.test/c', title: 'Cart', cost_usd: 0.000123, model: 'm-x' })
-    expect(hasTabBlock(t)).toBe(true)
-    expect(t).toContain('11')
-  })
-  test('页面没文字：退回 read_page(filter all)，网址 / 标题从标签清单查', async () => {
-    S.replies.set('get_page_text', new Error('get_page_text_no_content: page has no text'))
-    S.replies.set('read_page', { pageContent: 'TREE-FALLBACK', viewport: { width: 1, height: 1 }, tabId: 12 })
-    const r = await call('quick_check', { statement: 's', tabId: 12 })
-    expect(r.isError).toBe(false)
-    expect(methods().slice(0, 2)).toEqual(['get_page_text', 'read_page'])
-    expect(S.calls[1].params).toMatchObject({ filter: 'all', tabId: 12 })
-    expect(S.checkCalls[0].opts).toEqual({ statement: 's', url: 'https://beta.test/', title: 'Beta page', text: 'TREE-FALLBACK' })
-  })
-  test('退回时标签清单里查不到：url / title 为空串', async () => {
-    S.replies.set('get_page_text', new Error('x get_page_text_no_content'))
-    S.replies.set('read_page', { pageContent: 'T', viewport: { width: 1, height: 1 }, tabId: 888 })
-    await call('quick_check', { statement: 's' })
-    expect(S.checkCalls[0].opts.url).toBe('')
-    expect(S.checkCalls[0].opts.title).toBe('')
-  })
-  test('其他原因失败：不退回 read_page，错误照常返回', async () => {
-    S.replies.set('get_page_text', new Error('tab_not_found: gone'))
-    const r = await call('quick_check', { statement: 's', tabId: 1 })
-    expect(r.isError).toBe(true)
-    expect(text(r)).toContain('tab_not_found')
-    expect(methods()).not.toContain('read_page')
-    expect(S.checkCalls.length).toBe(0)
+    expect(methods()).not.toContain('get_page_text')
   })
 })
 
@@ -535,13 +413,12 @@ describe('选浏览器', () => {
 describe('会话标识', () => {
   test('客户端名 + 连字符 + 非空后缀；所有插件调用（含内部查询）同一个；跨调用不变', async () => {
     await call('find', { query: 'x' })
-    await call('quick_task', { goal: 'g' })
+    await call('tabs_create_mcp')
     const ids = new Set(S.calls.map((c) => c.sid))
     expect(ids.size).toBe(1)
     const id = [...ids][0] as string
     expect(id.startsWith(`${CLIENT_NAME}-`)).toBe(true)
     expect(id.length).toBeGreaterThan(CLIENT_NAME.length + 1)
-    expect(S.taskStarts[0].sid).toBe(id)
     f.reset()
     await call('read_page')
     expect(new Set(S.calls.map((c) => c.sid))).toEqual(new Set([id]))
@@ -608,12 +485,6 @@ describe('错误处理与结果形状', () => {
     expect(text(r)).toContain('debugger_attach_failed: could not attach')
     expect(typeof r.isError).toBe('boolean')
   })
-  test('依赖抛错（getJev）也变成错误结果', async () => {
-    S.jevError = new Error('no_key: missing')
-    const r = await call('quick_check', { statement: 's' })
-    expect(r.isError).toBe(true)
-    expect(text(r)).toContain('no_key')
-  })
   test('成功时 isError 恰为 false', async () => {
     const r = await call('tabs_create_mcp')
     expect(r.isError).toBe(false)
@@ -658,16 +529,11 @@ describe('截断', () => {
 describe('提示器', () => {
   test('收到内部方法名 / 解析后参数 / 是否错误', async () => {
     await call('read_page', { filter: 'all', tabId: 2 })
-    await call('quick_find', { description: 'd' })
-    await call('quick_check', { statement: 's' })
-    await call('quick_task', { goal: 'g' })
-    await call('quick_task_status', { taskId: 'a' })
-    await call('quick_task_result', { taskId: 'a' })
-    await call('quick_task_stop', { taskId: 'a' })
+    await call('find', { query: 'd' })
     await call('tabs_close_mcp', { tabId: 3 })
-    expect(S.hintCalls.map((h) => h.method)).toEqual(['read_page', 'jev_find', 'jev_check', 'jev_task', 'jev_status', 'jev_result', 'jev_stop', 'tabs_close_mcp'])
+    expect(S.hintCalls.map((h) => h.method)).toEqual(['read_page', 'find', 'tabs_close_mcp'])
     expect(S.hintCalls[0]).toEqual({ method: 'read_page', params: { filter: 'all', tabId: 2 }, isError: false })
-    expect(S.hintCalls[1].params).toEqual({ description: 'd' })
+    expect(S.hintCalls[1].params).toEqual({ query: 'd' })
     expect(S.hintCalls.every((h) => h.isError === false)).toBe(true)
   })
   test('出错时 isError 为 true', async () => {
@@ -707,7 +573,7 @@ describe('browser_batch', () => {
   }
   test('空数组', () => bad([]))
   test('嵌套 browser_batch', () => bad([act('browser_batch', { actions: [] })]))
-  for (const n of ['quick_task', 'quick_task_status', 'quick_task_result', 'quick_task_stop', 'list_connected_browsers', 'select_browser', 'switch_browser', 'no_such_tool']) {
+  for (const n of ['list_connected_browsers', 'select_browser', 'switch_browser', 'no_such_tool']) {
     test(`不允许的工具 ${n}`, () => bad([act('read_page'), act(n, {})]))
   }
   test('批里有不合法项时，前面合法的项也不执行', () => bad([act('navigate', { url: 'x', tabId: 1 }), act('browser_batch')]))
@@ -752,12 +618,11 @@ describe('browser_batch', () => {
     expect(m).toContain('tabs_close_mcp')
     expect(S.calls.find((c) => c.method === 'tabs_close_mcp')!.params).toEqual({ tabId: 12 })
   })
-  test('批内 quick_find / quick_check 走小模型流程，不把对外名发给插件', async () => {
-    const r = await call('browser_batch', { actions: [act('quick_find', { description: 'd' }), act('quick_check', { statement: 's' }), act('find', { query: 'q' })] })
+  test('批内 find 本地处理，不把名字发给插件', async () => {
+    const r = await call('browser_batch', { actions: [act('find', { query: 'q' })] })
     expect(r.isError).toBe(false)
-    expect(S.rankCalls.map((x) => x.opts.description)).toEqual(['d', 'q'])
-    expect(S.checkCalls.map((x) => x.opts.statement)).toEqual(['s'])
-    for (const n of ['quick_find', 'quick_check', 'jev_find', 'jev_check', 'find']) expect(methods()).not.toContain(n)
+    expect(S.findCalls.map((x) => x.query)).toEqual(['q'])
+    expect(methods()).not.toContain('find')
   })
   test('批内 computer 的图片块紧跟其文字块，图片不脱敏', async () => {
     S.replies.set('computer', { output: 'SHOT-OUT', tabId: 1, base64Image: 'SECRETim', imageFormat: 'png' })

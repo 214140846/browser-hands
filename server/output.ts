@@ -63,9 +63,7 @@ export function truncateOutput(text: string, max?: number): string {
 
 const WHOLE_TOOLS = new Set(['navigate', 'tabs_context_mcp', 'upload_image', 'gif_creator', 'resize_window', 'file_upload', 'tabs_create_mcp'])
 const BATCH_ACTIONS = new Set(['key', 'type', 'wait', 'left_click_drag', 'left_click', 'scroll_to', 'hover', 'right_click', 'triple_click', 'double_click', 'scroll'])
-const CLICKS = new Set(['left_click', 'double_click', 'triple_click', 'right_click'])
 const LOOKS = new Set(['screenshot', 'zoom'])
-const PASSIVE = new Set(['wait', 'scroll'])
 
 export function isBatchable(name: string, input: any): boolean {
   if (WHOLE_TOOLS.has(name)) return true
@@ -74,17 +72,13 @@ export function isBatchable(name: string, input: any): boolean {
   return typeof action === 'string' && BATCH_ACTIONS.has(action)
 }
 
-const CLICK_LIMIT = 5
 const SINGLE_LIMIT = 2
 
 const wrap = (s: string) => `<system-reminder>${s}</system-reminder>`
 
 export function makeHinter(): { note(name: string, input: any, isError: boolean): string | null } {
-  let clicks = 0
   let singles = 0
 
-  const clickHint = (n: number) =>
-    wrap(`You have made ${n} consecutive clicks. This looks like a simple flow on one page; consider delegating the whole sequence to quick_task instead of clicking step by step.`)
   const batchHint = () =>
     wrap('You are making consecutive single-step calls that could be combined. Use browser_batch to run several actions in one call.')
 
@@ -99,47 +93,17 @@ export function makeHinter(): { note(name: string, input: any, isError: boolean)
 
       if (name === 'browser_batch') {
         singles = 0
-        const actions = input?.actions
-        if (Array.isArray(actions)) {
-          for (const sub of actions) {
-            const subAction = sub && sub.name === 'computer' ? actionOf(sub.input) : undefined
-            if (subAction && CLICKS.has(subAction)) clicks++
-            else if (subAction && (LOOKS.has(subAction) || PASSIVE.has(subAction))) continue
-            else clicks = 0
-          }
-        }
-        if (clicks >= CLICK_LIMIT) {
-          const n = clicks
-          clicks = 0
-          return clickHint(n)
-        }
         return null
       }
 
       const action = name === 'computer' ? actionOf(input) : undefined
       if (action && LOOKS.has(action)) {
-        singles = 0 // 看一眼：打断单调用，点击计数不动
+        singles = 0 // 看一眼：打断单调用
         return null
       }
-      if (action && CLICKS.has(action)) {
-        clicks++
-        singles++
-      } else if (action && PASSIVE.has(action)) {
-        singles++
-      } else if (isBatchable(name, input)) {
-        clicks = 0
-        singles++
-      } else {
-        clicks = 0
-        singles = 0
-      }
+      if (isBatchable(name, input)) singles++
+      else singles = 0
 
-      if (clicks >= CLICK_LIMIT) {
-        const n = clicks
-        clicks = 0
-        singles = 0
-        return clickHint(n)
-      }
       if (singles >= SINGLE_LIMIT) {
         singles = 0
         return batchHint()

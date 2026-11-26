@@ -185,7 +185,7 @@ describe('isBatchable', () => {
     expect(isBatchable('computer', {})).toBe(false)
   })
   test('其他工具一律 false，区分大小写', () => {
-    for (const n of ['read_page', 'find', 'browser_batch', 'jev_task', 'get_page_text', 'NAVIGATE', 'Computer']) {
+    for (const n of ['read_page', 'find', 'browser_batch', 'get_page_text', 'NAVIGATE', 'Computer']) {
       expect(isBatchable(n, { action: 'left_click' })).toBe(false)
     }
   })
@@ -197,8 +197,7 @@ describe('isBatchable', () => {
 
 describe('makeHinter', () => {
   const wrapped = (s: any) => typeof s === 'string' && s.startsWith('<system-reminder>') && s.endsWith('</system-reminder>')
-  const isBatchHint = (s: any) => wrapped(s) && s.includes('browser_batch') && !s.includes('quick_task')
-  const isClickHint = (s: any, n: number) => wrapped(s) && s.includes('quick_task') && s.includes(String(n))
+  const isBatchHint = (s: any) => wrapped(s) && s.includes('browser_batch')
   const click = (action = 'left_click') => ['computer', { action }] as const
   const shot = ['computer', { action: 'screenshot' }] as const
   const find = ['find', { query: 'x' }] as const
@@ -220,9 +219,8 @@ describe('makeHinter', () => {
   test('中间插入不可批量调用 → 不提醒', () => {
     expect(run(makeHinter(), [nav, find, nav])).toEqual([null, null, null])
   })
-  test('browser_batch 与 jev_task 清零单调用计数', () => {
+  test('browser_batch 清零单调用计数', () => {
     expect(run(makeHinter(), [nav, ['browser_batch', { actions: [] }], nav])).toEqual([null, null, null])
-    expect(run(makeHinter(), [nav, ['jev_task', {}], nav])).toEqual([null, null, null])
   })
   test('出错的调用既不提醒也不计数、不清零', () => {
     const h = makeHinter()
@@ -236,58 +234,6 @@ describe('makeHinter', () => {
     const r = run(makeHinter(), [click(), wait])
     expect(r[0]).toBeNull()
     expect(isBatchHint(r[1])).toBe(true)
-  })
-  test('点击与截图交替，第 5 次点击给点击提醒并带数字 5，之后清零', () => {
-    const h = makeHinter()
-    const r = run(h, [click(), shot, click('double_click'), shot, click('triple_click'), shot, click('right_click'), shot, click()])
-    expect(r.slice(0, 8).every((x) => x === null)).toBe(true)
-    expect(isClickHint(r[8], 5)).toBe(true)
-    expect(run(h, [click(), shot, click()])).toEqual([null, null, null])
-  })
-  test('zoom 不打断连点', () => {
-    const zoom = ['computer', { action: 'zoom' }] as const
-    const r = run(makeHinter(), [click(), zoom, click(), zoom, click(), zoom, click(), zoom, click()])
-    expect(isClickHint(r[8], 5)).toBe(true)
-  })
-  test('点击数被其他调用清零', () => {
-    const r = run(makeHinter(), [click(), shot, click(), shot, click(), shot, click(), shot, find, click()])
-    expect(r.every((x) => x === null)).toBe(true)
-  })
-  test('jev_task 清零点击数', () => {
-    const r = run(makeHinter(), [click(), shot, click(), shot, click(), shot, click(), shot, ['jev_task', {}], click()])
-    expect(r.every((x) => x === null)).toBe(true)
-  })
-  test('批量内的点击按子动作累计，数字为累计值', () => {
-    const acts = (n: number) => Array.from({ length: n }, () => ({ name: 'computer', input: { action: 'left_click' } }))
-    expect(isClickHint(makeHinter().note('browser_batch', { actions: acts(5) }, false), 5)).toBe(true)
-    expect(isClickHint(makeHinter().note('browser_batch', { actions: acts(7) }, false), 7)).toBe(true)
-    const h = makeHinter()
-    expect(h.note('browser_batch', { actions: acts(4) }, false)).toBeNull()
-    expect(isClickHint(h.note(...click(), false), 5)).toBe(true)
-  })
-  test('批量内遇到别的子动作清零，截图类不清零', () => {
-    const c = { name: 'computer', input: { action: 'left_click' } }
-    const n = { name: 'navigate', input: {} }
-    const s = { name: 'computer', input: { action: 'screenshot' } }
-    expect(makeHinter().note('browser_batch', { actions: [c, c, c, n, c, c, c] }, false)).toBeNull()
-    expect(isClickHint(makeHinter().note('browser_batch', { actions: [c, c, s, c, c, c] }, false), 5)).toBe(true)
-  })
-  test('两类条件同时满足只给点击提醒，并清零两个计数', () => {
-    const h = makeHinter()
-    const c = { name: 'computer', input: { action: 'left_click' } }
-    expect(h.note('browser_batch', { actions: [c, c, c, c] }, false)).toBeNull()
-    expect(h.note(...wait, false)).toBeNull()
-    expect(isClickHint(h.note(...click(), false), 5)).toBe(true)
-    expect(h.note(...wait, false)).toBeNull()
-    expect(isBatchHint(h.note(...wait, false))).toBe(true)
-  })
-  test('批量提醒不清零点击数', () => {
-    const h = makeHinter()
-    const r = run(h, [click(), click(), click(), shot, click(), shot, click()])
-    expect(isBatchHint(r[1])).toBe(true)
-    expect(r[2]).toBeNull()
-    expect(r.slice(3, 6).every((x) => x === null)).toBe(true)
-    expect(isClickHint(r[6], 5)).toBe(true)
   })
   test('提醒器互相独立', () => {
     const h1 = makeHinter()
