@@ -18,3 +18,6 @@ export const nativeHostDirs: Record<string, string> = {
   // （ArcCore 里写死的是 Google/Chrome；1Password、Codex 的 Arc 支持也装在这里）。和 chrome 共用一份清单。
   arc: join(homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
 }
+
+// 借用别家目录的浏览器 → 目录的主人。卸载它时不删清单：那份文件主人也在用，删了主人会断连。
+export const borrowedHostDir: Record<string, string> = { arc: 'chrome' }
