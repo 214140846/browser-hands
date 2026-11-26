@@ -166,6 +166,7 @@ export function makeFakes() {
 
   const indicatorModule = group('', {
     pointIndicator: nothing,
+    withIndicatorHidden: async (_tabId: number, fn: Fn, _point?: number[]) => fn(),
     trackCall: (sessionId: string, tabId: number | undefined) => {
       const controller = new AbortController()
       let reject!: Fn
@@ -193,6 +194,8 @@ export function makeFakes() {
       }
     },
   })
+
+  ;(indicatorModule as any).CURSOR_WAIT_MS = 250
 
   const gifModule = { ...fixed('', { gifCreator: { output: 'gif done' } }), ...quiet('', ['recordAction']) }
 

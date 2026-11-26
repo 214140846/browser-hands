@@ -1,5 +1,6 @@
 // 指示器的后台一侧 + 调用取消。
-// 状态变化才发消息：第一个调用开始 → 画；空闲 HIDE_DELAY_MS 后 → 撤；页面导航完成 → 重画。没有心跳、没有轮询。
+// 状态变化才发消息：第一个调用开始 → 画；空闲 HIDE_DELAY_MS 后 → 撤；页面导航完成 → 重画；点 Stop → 立即撤。没有心跳、没有轮询。
+// 截图 / 放大 / 点击前后用 withIndicatorHidden 包一层：先让光框和 Stop 瞬间消失，睡 50ms 等重绘，动作完再恢复。
 // Stop 点击（content 发来的 STOP）和状态小窗的"全部停止"都走 stopCalls，让进行中的调用返回 stopped。
 import { stoppedError } from './abort.js'
 import { listSessions } from './sessions.js'
@@ -25,7 +26,36 @@ const quietly = (p) => p.catch(() => {}) // 受保护页面 / 标签已关：画
 
 export const showIndicator = (tabId) => quietly(inPage(tabId, 'show'))
 export const hideIndicator = (tabId) => quietly(inPage(tabId, 'hide'))
-export const pointIndicator = (tabId, x, y) => quietly(inPage(tabId, 'moveCursor', [x, y]))
+const SETTLE_MS = 50 // 隐藏后等一帧重绘，截图里才不会残留光框
+const CURSOR_WAIT_MS = 250 // 等光标走到位的上限
+
+// 光标移动到 (x, y)（取整）。waitMs > 0 时最多等光标落点这么久，0 = 不等
+export const pointIndicator = (tabId, x, y, waitMs = 0) => {
+  const moving = quietly(inPage(tabId, 'moveCursor', [Math.round(x), Math.round(y)]))
+  return waitMs > 0 ? Promise.race([moving, new Promise((r) => setTimeout(r, waitMs))]) : moving
+}
+export { CURSOR_WAIT_MS }
+
+// 只对页面里已有指示器的标签生效（不会为了隐藏而注入脚本）；返回是否真的隐藏了
+async function inPageIfPresent(tabId, op, args = []) {
+  try {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: (o, a) => window.__jevIndicator?.[o](...a) ?? null, args: [op, args] })
+    return r?.result != null
+  } catch {
+    return false // 受保护页面 / 标签已关
+  }
+}
+
+// 隐藏 → 睡 50ms → 执行 → 立即恢复。point 为点击目标（视口整数坐标）。没有在跑的调用或页面没有指示器时直接执行
+export async function withIndicatorHidden(tabId, fn, point) {
+  const hidden = tabId !== undefined && busy(tabId) && (await inPageIfPresent(tabId, 'suppress', [point ?? null]))
+  if (hidden) await new Promise((r) => setTimeout(r, SETTLE_MS))
+  try {
+    return await fn()
+  } finally {
+    if (hidden) await inPageIfPresent(tabId, 'restore')
+  }
+}
 
 // 登记一次进行中的调用；返回 {stopped, done}。stopped 是 Stop 时 reject 的 promise，done 在调用结束时调用
 export function trackCall(sessionId, tabId) {
@@ -77,7 +107,12 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (sender.id !== chrome.runtime.id) return
   if (msg?.type === 'STOP' && sender.tab) {
-    reply({ stopped: stopCalls(sender.tab.id) }) // 只停这个标签上的调用
+    const tabId = sender.tab.id
+    const stopped = stopCalls(tabId) // 只停这个标签上的调用
+    clearTimeout(hideTimers.get(tabId))
+    hideTimers.delete(tabId)
+    hideIndicator(tabId) // 点 Stop 立即撤，不等空闲计时
+    reply({ stopped })
   } else if (msg?.type === 'stopAll') {
     reply({ stopped: stopCalls() })
   } else if (msg?.type === 'getStatus') {

@@ -50,11 +50,12 @@ async function open(path: string) {
 }
 const page = () => ctx.pages().find((p) => p.url().startsWith(`http://localhost:${site.port}`))!
 // 读隔离世界里的指示器状态（页面脚本看不到它）
-const indicator = (op: 'state' | 'stopCenter') =>
+const indicator = (op: 'state' | 'stopCenter' | 'moveCenter' | 'suppress' | 'restore', ...args: number[]) =>
   sw().evaluate(
-    ([t, o]) => chrome.scripting.executeScript({ target: { tabId: t as number }, func: (o) => (window as any).__jevIndicator?.[o as string]() ?? null, args: [o] }).then((r) => r[0]?.result),
-    [mainTab, op] as const,
+    ([t, o, args]) => chrome.scripting.executeScript({ target: { tabId: t as number }, func: (o, a) => (window as any).__jevIndicator?.[o as string](...(a as number[])) ?? null, args: [o, args] }).then((r) => r[0]?.result),
+    [mainTab, op, args] as const,
   )
+const plan = (...a: number[]) => indicator('plan' as any, ...a)
 const waitCall = () => call('computer', { tabId: mainTab, action: 'wait', duration: 9 })
 
 beforeAll(async () => {
@@ -120,15 +121,140 @@ test('导航后重画；状态小窗列出会话和标签，全部停止让进�
   await popup.close()
 }, 40000)
 
-test('点击前光标出现一下，坐标落在 Stop 按钮上时按钮先收起', async () => {
+test('点击期间光框和条瞬间隐藏（点在 Stop 上也点不到它），点完恢复；光标常驻不淡出', async () => {
   await open('/a')
   const running = waitCall()
   await until(async () => ((await indicator('state')) as any)?.stop)
+  await Bun.sleep(400) // 等滑入结束
   const [x, y] = (await indicator('stopCenter')) as number[]
+  const before = ((await indicator('state')) as any).hideCount
   const c = await call('computer', { tabId: mainTab, action: 'left_click', coordinate: [x, y] })
   expect(c.err).toBe(false)
-  expect(((await indicator('state')) as any).stop).toBe(false) // 被点的位置正好是按钮：已收起，没点到它
+  const st = (await indicator('state')) as any
+  expect(st.hideCount).toBe(before + 1) // 点击前隐藏过一次
+  expect(st.captured).toBe(false) // 点完已恢复
+  expect(st.stop).toBe(true)
+  expect(st.border).toBe(true)
+  expect(st.cursor).toBe(true)
+  await Bun.sleep(1200) // 旧行为 600ms 就淡出；现在常驻
   expect(((await indicator('state')) as any).cursor).toBe(true)
-  await until(async () => !((await indicator('state')) as any)?.cursor) // 淡出
   expect((await running).err).toBe(false) // 没被误 Stop，wait 自然结束
+}, 40000)
+
+test('截图时光框和条不透明度为 0 但仍在 DOM，截完恢复', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  await Bun.sleep(400)
+  const before = ((await indicator('state')) as any).hideCount
+  const shot = await call('computer', { tabId: mainTab, action: 'screenshot' })
+  expect(shot.err).toBe(false)
+  const st = (await indicator('state')) as any
+  expect(st.hideCount).toBe(before + 1)
+  expect(st.captured).toBe(false)
+  expect(st.stop && st.border).toBe(true)
+  await running
+}, 40000)
+
+test('光标时长公式：D=24→150ms、100→246、300→343、>=444→380、小距离钳 140、<0.5 为 0', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  const T = async (d: number) => ((await plan(0, 0, d, 0)) as any).T
+  expect(await T(24)).toBe(150)
+  expect(await T(100)).toBe(246)
+  expect(await T(300)).toBe(343)
+  expect(await T(444)).toBe(380)
+  expect(await T(900)).toBe(380)
+  expect(await T(10)).toBe(140)
+  expect(await T(0.4)).toBe(0)
+  await running
+}, 40000)
+
+test('光标轨迹：17 个关键帧，起点、中点、终点；终点等于目标，倾斜两端为 0 且不超过 9 度', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  const [x0, y0, x1, y1] = [10, 20, 310, 420]
+  const p = (await plan(x0, y0, x1, y1)) as any
+  expect(p.points.length).toBe(17)
+  expect(p.points[0]).toEqual([x0, y0])
+  expect(p.points[16]).toEqual([x1, y1])
+  // 中点（i=8，s=0.5）：按规格公式在测试里独立手算
+  const dx = x1 - x0
+  const dy = y1 - y0
+  const D = Math.hypot(dx, dy)
+  const S = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t ** 3 * (10 - 15 * t + 6 * t * t))
+  const h = Math.min(0.03 * D, 4)
+  const c = ((D + h) * S(0.5 / 0.8) - h * S((0.5 - 0.66) / 0.34)) / D
+  const A = (0.8 * dx - 0.6 * dy > 0 ? -1 : 1) * Math.min(0.1 * D, 30)
+  const l = (A * Math.sin(Math.PI * c)) / D
+  expect(p.points[8][0]).toBeCloseTo(x0 + dx * c - dy * l, 6)
+  expect(p.points[8][1]).toBeCloseTo(y0 + dy * c + dx * l, 6)
+  // 弧线：中点偏离直线，最大侧偏不超过 min(0.1D, 30)
+  const off = Math.abs((p.points[8][0] - x0) * dy - (p.points[8][1] - y0) * dx) / D
+  expect(off).toBeGreaterThan(1)
+  expect(off).toBeLessThanOrEqual(Math.min(0.1 * D, 30) + 1e-6)
+  expect(p.leans[0]).toBe(0)
+  expect(p.leans[16]).toBe(0)
+  for (const a of p.leans) expect(Math.abs(a)).toBeLessThanOrEqual(9)
+  await running
+}, 40000)
+
+test('光标真实移动：第一次就位，第二次走完后停在目标整数坐标；移动期间不会消失', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  await call('computer', { tabId: mainTab, action: 'hover', coordinate: [100, 100] })
+  expect(((await indicator('state')) as any).cursorPos).toEqual([100, 100])
+  await call('computer', { tabId: mainTab, action: 'hover', coordinate: [400, 300] }) // 等光标落点后才返回
+  // 光标时长 380ms 大于工具侧最多等的 250ms，这里轮询到落点
+  await until(async () => {
+    const p = ((await indicator('state')) as any).cursorPos
+    return Math.abs(p[0] - 400) < 0.5 && Math.abs(p[1] - 300) < 0.5
+  })
+  const st = (await indicator('state')) as any
+  expect(st.cursorPos[0]).toBeCloseTo(400, 0)
+  expect(st.cursorPos[1]).toBeCloseTo(300, 0)
+  expect(st.cursor).toBe(true)
+  await running
+}, 40000)
+
+test('顶部状态条：在顶部、高 47px、含 Stop 与「移到另一边」；点击翻转后在底部，再点回顶部', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  await Bun.sleep(400)
+  let st = (await indicator('state')) as any
+  expect(st.side).toBe('top')
+  expect(st.stripTop).toBe(0)
+  expect(st.stripHeight).toBe(47)
+  expect(st.hasStop && st.hasMove).toBe(true)
+  const [mx, my] = (await indicator('moveCenter')) as number[]
+  await page().mouse.click(mx, my) // 真实点击「移到另一边」
+  st = (await indicator('state')) as any
+  expect(st.side).toBe('bottom')
+  expect(st.stripTop + st.stripHeight).toBeCloseTo(await page().evaluate(() => innerHeight), 0)
+  const [m2x, m2y] = (await indicator('moveCenter')) as number[]
+  await page().mouse.click(m2x, m2y)
+  expect(((await indicator('state')) as any).side).toBe('top')
+  await running
+}, 40000)
+
+test('截图隐藏：条与光框不透明度立即 0 且仍在 DOM；恢复后 300ms 内回到 1', async () => {
+  await open('/a')
+  const running = waitCall()
+  await until(async () => ((await indicator('state')) as any)?.stop)
+  await Bun.sleep(400)
+  expect(((await indicator('state')) as any).edgeOpacity).toBe(1)
+  await indicator('suppress')
+  let st = (await indicator('state')) as any
+  expect(st.edgeOpacity).toBe(0)
+  expect(st.hasStop && st.hasMove && st.border).toBe(true) // 仍在 DOM 里
+  await indicator('restore')
+  await Bun.sleep(450)
+  st = (await indicator('state')) as any
+  expect(st.edgeOpacity).toBe(1)
+  expect(st.captured).toBe(false)
+  await running
 }, 40000)

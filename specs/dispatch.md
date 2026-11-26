@@ -36,7 +36,8 @@
 | `./sessions.js` | `closeSession` | `(sessionId: string) => Promise<object>` | 清理会话；其结果就是 `session_closed` 的结果 |
 | `./guard.js` | `startGuard` | `(tabId: number) => Promise<Guard>` | 记下标签此刻所在网站；`Guard = { tabId, check(stage: string): Promise<void> }`，`check` 发现标签已换到别的网站时 reject（`code: 'navigated_away'`）。`stage` 只用于报错文字 |
 | `./indicator.js` | `trackCall` | `(sessionId: string, tabId?: number) => { stopped: Promise<never>, signal: AbortSignal, done(): void }` | 登记进行中的调用并让该标签显示操作指示器；用户点 Stop 时 `signal` 中止，`stopped` 以 `stoppedError()` 同类的错误（`code: 'stopped'`）reject；调用结束时必须调 `done()` |
-| `./indicator.js` | `pointIndicator` | `(tabId: number, x: number, y: number) => Promise<void>`，永不 reject | 在标签里画「光标要去的位置」 |
+| `./indicator.js` | `pointIndicator` | `(tabId: number, x: number, y: number, waitMs?: number) => Promise<void>`，永不 reject | 在标签里画「光标要去的位置」；`waitMs` 为等光标走到的上限（动作调用传 `CURSOR_WAIT_MS`） |
+| `./indicator.js` | `withIndicatorHidden` / `CURSOR_WAIT_MS` | `(tabId, fn, point?) => Promise<T>` / `number` | 点击期间临时隐藏指示器（点在 Stop 上时让位），`fn` 结束后恢复 |
 | `./abort.js` | `checkAbort` | `(signal?: AbortSignal) => void`，信号已中止时同步抛 `code: 'stopped'` 的 Error | 判断是否被 Stop |
 | `./abort.js` | `abortableSleep` | `(ms: number, signal?: AbortSignal) => Promise<void>`，信号中止时 reject（`code: 'stopped'`） | `wait` 动作 |
 | `./abort.js` | `stoppedError` | `() => Error`，`code: 'stopped'` | 会话被 Stop 后拒绝新调用时抛的错误 |
@@ -289,10 +290,10 @@
 
 | 动作 | 入参与校验 | 行为 | `output` |
 |---|---|---|---|
-| `left_click` / `double_click` / `triple_click` | 目标点见 9.1。`modifiers`（`+` 连接的修饰键名）为真值时，掩码 = `modifierMask(modifiers)`，否则 `0` | 必须发生：`pointIndicator(tabId, x, y)` 画指示器；点击前 `beginClickInterception(tabId)` 武装拦截并得到凭据；在 `withBackground(tabId, …)` 里调用 `click(tabId, x, y, 'left', 次数 1/2/3, 掩码, 前置检查)`，其中前置检查回调由输入模块在鼠标按下前调用，它检查停止信号（已中止则抛 `stopped`）并做一次守卫复查（所以一次点击共两次复查：动作开始前、按下前各一次）；点击成功后 `finishClickInterception(凭据, s)` 得到新标签 id 列表 | 给了 `ref` 时含 `ref` 原文，否则含取整后的 `coordinate` 两个分量；末尾直接拼上 `newTabNote(新标签 id 列表)` 的返回值（空串即不加）。单 / 双 / 三击的措辞需让人看出区别（自定） |
+| `left_click` / `double_click` / `triple_click` | 目标点见 9.1。`modifiers`（`+` 连接的修饰键名）为真值时，掩码 = `modifierMask(modifiers)`，否则 `0` | 必须发生：`pointIndicator(tabId, x, y, CURSOR_WAIT_MS)` 画指示器；点击（含前置检查与点击本身）包在 `withIndicatorHidden(tabId, …, [x, y])` 里；点击前 `beginClickInterception(tabId)` 武装拦截并得到凭据；在 `withBackground(tabId, …)` 里调用 `click(tabId, x, y, 'left', 次数 1/2/3, 掩码, 前置检查)`，其中前置检查回调由输入模块在鼠标按下前调用，它检查停止信号（已中止则抛 `stopped`）并做一次守卫复查（所以一次点击共两次复查：动作开始前、按下前各一次）；点击成功后 `finishClickInterception(凭据, s)` 得到新标签 id 列表 | 给了 `ref` 时含 `ref` 原文，否则含取整后的 `coordinate` 两个分量；末尾直接拼上 `newTabNote(新标签 id 列表)` 的返回值（空串即不加）。单 / 双 / 三击的措辞需让人看出区别（自定） |
 | `right_click` | 同上，但按钮 `'right'`、次数 1，**不**调 `beginClickInterception`（右键没有新开标签的问题） | 同上（没有拦截的凭据，不用关心 `finishClickInterception`） | 同上，不要求含新标签附注 |
 | 点击类执行步骤失败 | — | 调用 `abortClickInterception(凭据)`，并按 9.1 包装失败；此时不调用 `finishClickInterception` | — |
-| `hover` | 目标点见 9.1 | 必须发生：`pointIndicator` 画指示器；`withBackground` 里调 `hover(tabId, x, y)`；不拦新标签；失败包装 | 含 `ref` 原文，或取整后的坐标 |
+| `hover` | 目标点见 9.1 | 必须发生：`pointIndicator(…, CURSOR_WAIT_MS)` 画指示器；`withBackground` 里调 `hover(tabId, x, y)`；不拦新标签；失败包装 | 含 `ref` 原文，或取整后的坐标 |
 | `left_click_drag` | `start_coordinate` 与 `coordinate`（终点）都必须是长度 2 的数组，否则 `invalid_params`（不调用输入模块） | 两点各自经 `toViewport` 换算；`pointIndicator` 画在**起点**；`withBackground` 里 `drag(tabId, 起点, 终点, signal)`；失败包装 | 含两个端点取整后的坐标 |
 | `type` | `text` 必须是非空字符串，否则 `invalid_params` | `withBackground` 里 `type(tabId, text, signal)`；失败包装 | 含该文字原文 |
 | `key` | `text` 必须是非空字符串；`repeat`（缺省 / `null` 为 1）必须是 1 到 100 的整数（含 100），其余（`0`、负数、小数、字符串、101）→ `invalid_params` | 见 9.3 | 含每个键（按调用方写的样子）；重复时含重复次数（自定） |
