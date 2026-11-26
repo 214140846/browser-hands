@@ -249,7 +249,7 @@ test('状态小窗显示 Jev 余额：没配 key 显示未配置；配了读到�
   const open1 = async () => {
     const popup = await ctx.newPage()
     await popup.goto(`chrome-extension://${extId}/popup.html`)
-    await until(async () => !(await popup.textContent('#balance'))!.includes('查询中'))
+    await until(async () => !(await popup.textContent('#balance'))!.includes('loading'))
     const t = (await popup.textContent('#balance'))!
     await popup.close()
     return t
