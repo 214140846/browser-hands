@@ -26,7 +26,8 @@
 |---|---|---|---|
 | `./debugger.js` | `send` | `(tabId: number, method: string, params?: object) => Promise<any>`，失败 reject | 发 CDP 命令：`Emulation.setFocusEmulationEnabled`（参数 `{ enabled: boolean }`）、`Page.captureScreenshot` |
 | `./debugger.js` | `withDebugger` | `<T>(tabId: number, fn: () => Promise<T>) => Promise<T>`，调试器的占用与释放由它负责，返回 `fn` 的结果、透传 `fn` 的错误 | `withBackground` 的外层 |
-| `./sessions.js` | `joinGroup` | `(session: object, tabId: number) => Promise<unknown>`，把标签并入该会话的组；失败 reject | 新开标签所属的组正是 `session.groupId` 时，用它入组 |
+| `./sessions.js` | `joinGroup` | `(session: object, tabId: number) => Promise<unknown>`，把标签并入该会话（组模式入组，清单模式记进 `tabIds`）；失败 reject | 新开标签所属的组正是 `session.groupId` 时，或会话处于清单模式时，用它并入 |
+| `./sessions.js` | `tracksTabIds` | `(session: object) => boolean`，会话是否处于清单模式（不用标签组，自己记 `tabIds`） | 决定新标签走哪条并入路径 |
 
 用到的 Chrome API（都按 Promise 形式调用）：
 
@@ -145,6 +146,7 @@
 |---|---|
 | 标签所在窗口已最小化，注入成功 | 返回凭据（非 null 对象） |
 | 窗口未最小化（含 `normal`、有无焦点都一样） | `null`，不注入 |
+| 窗口未最小化，但 `browserKind()` 为 `'arc'`（Arc 在后台标签里点 `target=_blank` 链接不会开任何东西），注入成功 | 返回凭据 |
 | 标签没有 `windowId`、读不到标签或窗口 | `null`，不注入 |
 | 注入失败 | `null` |
 
@@ -237,6 +239,7 @@
 
 | 原标签的组 | 处理 | 计入结果？ |
 |---|---|---|
+| 任意，且 `session` 处于清单模式（`tracksTabIds(session)` 为真，即 Arc 等不能用标签组的浏览器） | `joinGroup(session, 新标签 id)`，不调 `chrome.tabs.group` | 成功是，失败否 |
 | 不在组里（`TAB_GROUP_ID_NONE` 或缺省） | 不入组 | 是 |
 | 在组里，且 `session.groupId` 等于它 | `joinGroup(session, 新标签 id)` | 成功是，失败否 |
 | 在组里，`session` 缺省或组不同 | `chrome.tabs.group`，`groupId` 为原组，`tabIds` 为新标签 id（单个 id 或单元素数组均可） | 成功是，失败否 |

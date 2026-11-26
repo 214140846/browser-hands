@@ -1,4 +1,4 @@
-// bun run setup（或打包后的 node thundermcp.mjs setup）[--browser chrome|chromium|chrome-for-testing] [--dir <NativeMessagingHosts 目录>] [--uninstall]
+// bun run setup（或打包后的 node thundermcp.mjs setup）[--browser chrome|chromium|chrome-for-testing|arc] [--dir <NativeMessagingHosts 目录>] [--uninstall]
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'

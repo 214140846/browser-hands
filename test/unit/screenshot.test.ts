@@ -1,11 +1,34 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
-import { makeChrome } from './fakes/screenshot-chrome'
+import { fakeJpeg, fakePng, makeChrome } from './fakes/screenshot-chrome'
 
 // 模块加载时就会注册 chrome 监听，所以先挂假 chrome 再动态导入
 const fake = makeChrome()
 ;(globalThis as any).chrome = fake.chrome
 mock.module('../../extension/debugger.js', () => fake.debuggerModule)
 mock.module('../../extension/sessions.js', () => fake.sessionsModule)
+let browser = 'chrome'
+mock.module('../../extension/browser.js', () => ({ browserKind: async () => browser }))
+
+// Arc 本地缩图用到的后台 API 替身：位图尺寸从 PNG 头读，画布按自身尺寸出假图
+const encoded: { type: string; quality?: number; width: number; height: number }[] = []
+let oversizeLocalAt: number | undefined
+;(globalThis as any).createImageBitmap = async (blob: Blob) => {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const size = (mod as any).imageSize(Buffer.from(bytes).toString('base64'))
+  return { ...size, close() {} }
+}
+;(globalThis as any).OffscreenCanvas = class {
+  constructor(public width: number, public height: number) {}
+  getContext() {
+    return { imageSmoothingQuality: 'low', drawImage() {} }
+  }
+  async convertToBlob(o: { type: string; quality?: number }) {
+    encoded.push({ ...o, width: this.width, height: this.height })
+    const q = o.quality === undefined ? undefined : Math.round(o.quality * 100)
+    const b64 = o.type === 'image/png' ? fakePng(this.width, this.height) : fakeJpeg(this.width, this.height, q === oversizeLocalAt ? 1_500_000 : 0)
+    return new Blob([Buffer.from(b64, 'base64')], { type: o.type })
+  }
+}
 const mod = await import('../../extension/screenshot.js')
 const { sessionClosedHooks } = fake.sessionsModule
 const { targetSize, beginBatch, endBatch, setContext, getContext, toViewport, cacheImage, getImage, recheckBeforeCapture, imageSize, screenshot, zoom } = mod as any
@@ -27,6 +50,9 @@ beforeEach(() => {
   fake.state.oversizeAtQuality = undefined
   fake.state.noData = false
   fake.state.override = undefined
+  browser = 'chrome'
+  encoded.length = 0
+  oversizeLocalAt = undefined
   endBatch()
 })
 
@@ -263,6 +289,53 @@ describe('screenshot', () => {
     fake.state.viewport = { width: 1280, height: 800, dpr: 1, x: 0, y: 0 }
     fake.state.noData = true
     expect(await screenshot(freshTab()).then(() => 'ok', () => 'fail')).toBe('fail')
+  })
+})
+
+describe('Arc：调试协议不缩放，插件后台缩', () => {
+  beforeEach(() => {
+    browser = 'arc'
+    fake.state.viewport = { width: 1470, height: 891, dpr: 2, x: 0, y: 0 }
+  })
+
+  test('需要缩小：只发 scale 1 的 PNG 截图，本地缩到预期尺寸并编成 JPEG', async () => {
+    const r = await screenshot(freshTab(), 0.5)
+    const shots = fake.shots()
+    expect(shots).toHaveLength(1)
+    expect(shots[0].params).toMatchObject({ format: 'png', clip: { scale: 1 } })
+    expect(r.format).toBe('jpeg')
+    expect(encoded).toEqual([{ type: 'image/jpeg', quality: 0.75, width: r.width, height: r.height }])
+    near(r.width, Math.round(r.frameWidth * 0.5))
+    near(r.height, Math.round(r.frameHeight * 0.5))
+  })
+
+  test('本地编出的 JPEG 过大：降到质量 50 再编一次，不重截', async () => {
+    oversizeLocalAt = 75
+    await screenshot(freshTab(), 0.5)
+    expect(fake.shots()).toHaveLength(1)
+    expect(encoded.map((e) => e.quality)).toEqual([0.75, 0.5])
+  })
+
+  test('不需要缩小（scale 本来就是 1）：照常走调试协议，不经本地缩图', async () => {
+    fake.state.viewport = { width: 800, height: 600, dpr: 1, x: 0, y: 0 }
+    await screenshot(freshTab(), 1)
+    expect(fake.shots()[0].params.clip.scale).toBe(1)
+    expect(encoded).toHaveLength(0)
+  })
+
+  test('zoom 需要缩小：同样本地缩，输出 PNG', async () => {
+    const r = await zoom(freshTab(), [0, 0, 1400, 800], 0.3)
+    expect(fake.shots()).toHaveLength(1)
+    expect(fake.shots()[0].params.clip.scale).toBe(1)
+    expect(r.format).toBe('png')
+    expect(encoded.at(-1)).toMatchObject({ type: 'image/png', width: r.width, height: r.height })
+  })
+
+  test('Chrome 上同样的截图仍由调试协议直接缩放', async () => {
+    browser = 'chrome'
+    await screenshot(freshTab(), 0.5)
+    expect(fake.shots()[0].params.clip.scale).toBeLessThan(1)
+    expect(encoded).toHaveLength(0)
   })
 })
 

@@ -1,7 +1,8 @@
 // 后台标签支持：焦点模拟 + 临时静音、隐藏标签唤醒、最小化窗口下的点击拦截。
 // 行为见 specs/background-tab.md。
 import { send, withDebugger } from './debugger.js'
-import { joinGroup } from './sessions.js'
+import { browserKind } from './browser.js'
+import { joinGroup, tracksTabIds } from './sessions.js'
 
 // ---------- 小工具 ----------
 
@@ -209,7 +210,8 @@ export async function beginClickInterception(tabId) {
     const tab = await chrome.tabs.get(tabId)
     if (tab.windowId === undefined || tab.windowId === null) return null
     const win = await chrome.windows.get(tab.windowId)
-    if (win.state !== 'minimized') return null
+    // Chrome 只有最小化窗口会丢掉这类点击开出的新标签；Arc 在后台标签里点 target=_blank 链接什么都不开（2026-11 实测），所以一律拦截代开
+    if (win.state !== 'minimized' && (await browserKind()) !== 'arc') return null
     await inject(tabId, armGuard)
     // 凭据：begin 当时原标签的快照，finish 时不再重读
     return { tabId, windowId: tab.windowId, index: tab.index, groupId: tab.groupId }
@@ -252,7 +254,10 @@ export async function finishClickInterception(token, session) {
       )
       if (!tab) tab = await soft(() => chrome.tabs.create({ url, active: false }))
       if (!tab || typeof tab.id !== 'number' || tab.windowId !== token.windowId) continue
-      if (inGroup) {
+      if (session && tracksTabIds(session)) {
+        // 清单模式（Arc）：没有组，直接记进本会话
+        if (!(await soft(async () => (await joinGroup(session, tab.id), true)))) continue
+      } else if (inGroup) {
         const ok =
           session && session.groupId === token.groupId
             ? await soft(async () => (await joinGroup(session, tab.id), true))

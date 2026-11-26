@@ -14,4 +14,7 @@ export const nativeHostDirs: Record<string, string> = {
   chrome: join(homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
   chromium: join(homedir(), 'Library/Application Support/Chromium/NativeMessagingHosts'),
   'chrome-for-testing': join(homedir(), 'Library/Application Support/Google/Chrome for Testing/NativeMessagingHosts'),
+  // Arc 不读自己的 Arc/User Data 目录：它编译时沿用了 Chrome 的路径，native host 清单只认 Chrome 这个目录
+  // （ArcCore 里写死的是 Google/Chrome；1Password、Codex 的 Arc 支持也装在这里）。和 chrome 共用一份清单。
+  arc: join(homedir(), 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
 }

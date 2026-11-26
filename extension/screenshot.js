@@ -1,5 +1,7 @@
 // 截图模块：可视区截图、区域放大、出图尺寸求解、坐标上下文与批次、按会话缓存图片。
-// 出图全部交给调试协议按目标尺寸直接生成，不在页面里用 canvas。
+// 出图交给调试协议按目标尺寸直接生成，不在页面里用 canvas。
+// 例外：Arc 的调试协议不肯缩放出图，改为原尺寸截下后在插件后台用 OffscreenCanvas 缩（见 shootScaledLocally）。
+import { browserKind } from './browser.js'
 import { send } from './debugger.js'
 import { sessionClosedHooks } from './sessions.js'
 
@@ -192,10 +194,44 @@ async function capture(tabId, format, quality, box, scale) {
   return r.data
 }
 
+function fromBase64(b64) {
+  const bin = atob(b64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes
+}
+
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(bin)
+}
+
+// Arc：clip.scale 小于 1 时 Page.captureScreenshot 返回空数据，等于 1 时正常（2026-11 在 Arc 上逐项实测）。
+// 所以按 scale 1 截无损 PNG，再在插件后台缩到预期尺寸、编码成要的格式；JPEG 超大时同样降一次质量。
+async function shootScaledLocally(tabId, format, box, wantW, wantH) {
+  const full = await capture(tabId, 'png', undefined, box, 1)
+  const bitmap = await createImageBitmap(new Blob([fromBase64(full)], { type: 'image/png' }))
+  const width = Math.max(1, Math.min(wantW, bitmap.width))
+  const height = Math.max(1, Math.min(wantH, bitmap.height))
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  bitmap.close()
+  const encode = async (quality) =>
+    blobToBase64(await canvas.convertToBlob(format === 'jpeg' ? { type: 'image/jpeg', quality: quality / 100 } : { type: 'image/png' }))
+  let data = await encode(Q_NORMAL)
+  if (format === 'jpeg' && data.length > MAX_B64) data = await encode(Q_FALLBACK)
+  return { data, width, height }
+}
+
 // 按预期出图尺寸截图；格式为 JPEG 时处理超大降质，尺寸不符时修正一次
 async function shoot(tabId, format, box, dpr, wantW, wantH) {
   // 缩放系数：预期宽 / 物理宽，不超过 1
   let scale = Math.min(1, wantW / (box.width * dpr))
+  if (scale < 1 && (await browserKind()) === 'arc') return shootScaledLocally(tabId, format, box, wantW, wantH)
   let quality = Q_NORMAL
   let data = await capture(tabId, format, quality, box, scale)
   if (format === 'jpeg' && data.length > MAX_B64) {
