@@ -156,3 +156,7 @@
 - region 缺失：`zoom needs a region [x0, y0, x1, y1].`
 - region 非法：`region must be four non-negative numbers with x1 > x0 and y1 > y0.`
 - 越界：`region falls outside the visible viewport ({W}x{H}); pick an area inside it.`
+
+## 7. 指示器隐藏
+
+`screenshot` 与 `zoom` 出图时把采集包在 `withIndicatorHidden(tabId, …)` 里：采集期间光框、状态条、光标不入画，采集完恢复；采集失败也恢复。

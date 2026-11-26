@@ -8,9 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { escapeJson, sanitizeText } from '../extension/redact.js'
 import { explainNoBrowser, type Conn } from './browsers'
-import { getJev } from './jev'
-import { jevResult, jevStatus, jevStop, startJevTask } from './jev-task'
-import { check, formatFind, jevFindJson, parseTree, prefilter, rank } from './jev-tools'
+import { findLocal, formatFind, parseTree } from './find-local'
 import { makeHinter, truncateOutput } from './output'
 import RAW_INSTRUCTIONS from './instructions.md' with { type: 'text' }
 import { PROTOCOL_VERSION } from './paths'
@@ -44,13 +42,6 @@ async function tabBlock(c: Ctx, exec?: number): Promise<string> {
   for (const t of tabs) lines.push(`- tabId ${t.tabId}: ${escapeJson(String(t.title ?? ''))} (${escapeJson(String(t.url ?? ''))})`)
   lines.push(escapeJson(json({ availableTabs: tabs, tabGroupId: r?.tabGroupId, initialTabId: r?.initialTabId })))
   return lines.join('\n')
-}
-
-// 按 tabId 查标签的网址 / 标题，查不到为空串
-async function tabMeta(c: Ctx, tabId: unknown) {
-  const r = await plug(c, 'tabs_context_mcp', {})
-  const t = (r?.availableTabs ?? []).find((x: any) => x.tabId === tabId)
-  return { url: String(t?.url ?? ''), title: String(t?.title ?? '') }
 }
 
 // ---------- 处理函数 ----------
@@ -112,46 +103,13 @@ const pageText: Handler = async (c, a) => {
   return { text, tabs: { exec: r.tabId } }
 }
 
-// find / quick_find 共用：读页 → 预筛 → 小模型排序
-async function ranked(c: Ctx, description: string, tabId: unknown) {
-  const page = await plug(c, 'read_page', { filter: 'all', tabId })
-  const meta = await tabMeta(c, page.tabId)
-  const jev = await getJev()
-  const rows = prefilter(parseTree(page.pageContent), description)
-  const result = await rank(jev, { description, rows, url: meta.url, title: meta.title })
-  return { result, exec: page.tabId as number }
-}
+// find：读页 → 本地关键词打分，不调任何模型
 const findHandler: Handler = async (c, a) => {
-  const { result, exec } = await ranked(c, a.query, a.tabId)
-  const f = formatFind(result.candidates, result.none)
+  const page = await plug(c, 'read_page', { filter: 'all', tabId: a.tabId })
+  const f = formatFind(findLocal(parseTree(page.pageContent), a.query))
   if (!f.ok) throw new Error(`find failed: ${f.error}`)
-  return { text: f.text, tabs: { exec } }
+  return { text: f.text, tabs: { exec: page.tabId as number } }
 }
-const quickFind: Handler = async (c, a) => {
-  const { result, exec } = await ranked(c, a.description, a.tabId)
-  return { text: json(jevFindJson(result)), tabs: { exec } }
-}
-const quickCheck: Handler = async (c, a) => {
-  let page: { url: string; title: string; text: string; tabId: number }
-  try {
-    const r = await plug(c, 'get_page_text', { tabId: a.tabId, max_chars: 20000 })
-    page = { url: r.url, title: r.title, text: r.text, tabId: r.tabId }
-  } catch (e) {
-    if (!msgOf(e).includes('get_page_text_no_content')) throw e
-    const r = await plug(c, 'read_page', { filter: 'all', tabId: a.tabId })
-    page = { ...(await tabMeta(c, r.tabId)), text: r.pageContent, tabId: r.tabId }
-  }
-  const jev = await getJev()
-  const v = await check(jev, { statement: a.statement, url: page.url, title: page.title, text: page.text })
-  const line = { probability_true: Math.round(v.p * 1000) / 1000, url: page.url, title: page.title, cost_usd: Math.round(v.cost * 1e6) / 1e6, model: v.model }
-  return { text: json(line), tabs: { exec: page.tabId } }
-}
-const quickTask: Handler = async (c, a) => {
-  const jev = await getJev()
-  const r = await startJevTask(c.conn, c.sid, a, jev)
-  return { text: json(r), tabs: {} }
-}
-const taskQuery = (fn: (id: string) => unknown | Promise<unknown>): Handler => async (_c, a) => ({ text: json(await fn(a.taskId)), tabs: false })
 
 // ---------- schema 零件 ----------
 const num = z.number()
@@ -161,7 +119,7 @@ const tabId = num
 const xy = z.array(num).length(2)
 
 // ---------- 工具表 ----------
-type Def = { desc: string; shape: z.ZodRawShape; run: Handler; hint?: string; batch?: boolean }
+type Def = { desc: string; shape: z.ZodRawShape; run: Handler; batch?: boolean }
 const DEFS: Record<string, Def> = {
   tabs_context_mcp: {
     desc: 'List the tabs in your dedicated tab group (id, title, URL). Call this first in a session and whenever you lose track of which tab is which. Pass createIfEmpty to open a starter tab when the group has none. On your first call also pass session_name, a short task name, so the user can tell which task owns this tab group.',
@@ -231,52 +189,6 @@ const DEFS: Record<string, Def> = {
     run: findHandler,
     batch: true,
   },
-  quick_find: {
-    desc: 'Like find, but returns structured JSON (candidate refs with confidence, plus the chance that nothing matches). Prefer it when you will act on the answer programmatically; "nothing found" is a normal result, not an error.',
-    shape: { description: str.describe('The element to look for, in plain language.'), tabId: tabId.optional().describe('Target tab.') },
-    run: quickFind,
-    hint: 'jev_find',
-    batch: true,
-  },
-  quick_check: {
-    desc: 'Ask a fast helper model whether a statement about the current page is true (e.g. "the order was placed", "an error banner is visible"). Returns a probability, the page URL/title and the cost. Cheaper than reading the page yourself, but it is a judgement, not proof.',
-    shape: { statement: str.describe('A claim about the page that can be true or false.'), tabId: tabId.optional().describe('Target tab.') },
-    run: quickCheck,
-    hint: 'jev_check',
-    batch: true,
-  },
-  quick_task: {
-    desc: 'Hand a multi-step browsing goal to a fast helper model that drives the tab for you. Works best with a concrete plan: exact values to enter, expected results after each step. Irreversible steps are blocked unless allowIrreversible is set. With background=true it returns a taskId at once; poll with quick_task_status and collect with quick_task_result.',
-    shape: {
-      goal: str.describe('What to accomplish.'),
-      url: str.optional().describe('Page to open before starting.'),
-      details: str.optional().describe('Extra context: values to type, the route to follow, success criteria.'),
-      allowIrreversible: bool.optional().describe('Permit submit/pay/delete style actions. Leave off unless the user approved them.'),
-      stopBefore: z.array(str).optional().describe('Describe actions at which the task must pause and report back.'),
-      tabId: tabId.optional().describe('Tab to work in.'),
-      background: bool.optional().describe('Run asynchronously and return a taskId.'),
-    },
-    run: quickTask,
-    hint: 'jev_task',
-  },
-  quick_task_status: {
-    desc: 'Progress of a background quick_task: state, steps taken, current URL and spend so far.',
-    shape: { taskId: str.describe('Id returned by quick_task.') },
-    run: taskQuery(jevStatus),
-    hint: 'jev_status',
-  },
-  quick_task_result: {
-    desc: 'Final outcome of a background quick_task (or why it failed). Call after quick_task_status reports it has finished.',
-    shape: { taskId: str.describe('Id returned by quick_task.') },
-    run: taskQuery(jevResult),
-    hint: 'jev_result',
-  },
-  quick_task_stop: {
-    desc: 'Abort a running background quick_task and return its final state.',
-    shape: { taskId: str.describe('Id returned by quick_task.') },
-    run: taskQuery(jevStop),
-    hint: 'jev_stop',
-  },
   form_input: {
     desc: 'Set the value of a form control by ref: text boxes, textareas, selects (option text or value), checkboxes and radios (boolean), sliders (number). More dependable than typing when clicks fail to register.',
     shape: {
@@ -298,7 +210,7 @@ const DEFS: Record<string, Def> = {
     batch: true,
   },
   browser_batch: {
-    desc: 'Run several tool calls in one round trip, strictly in order. Each action is {name, input} with the same input you would pass to that tool when calling it alone. Allowed names: tabs_context_mcp, tabs_create_mcp, tabs_close_mcp (aliases tabs_context, tabs_create, tabs_close), read_page, get_page_text, computer, find, quick_find, quick_check, form_input, navigate, javascript_tool, resize_window, read_console_messages, read_network_requests, file_upload, upload_image, gif_creator. Execution stops at the first failure and reports how many actions were skipped. Tab context is appended once at the end. Click coordinates in a batch follow the last screenshot taken before the batch.',
+    desc: 'Run several tool calls in one round trip, strictly in order. Each action is {name, input} with the same input you would pass to that tool when calling it alone. Allowed names: tabs_context_mcp, tabs_create_mcp, tabs_close_mcp (aliases tabs_context, tabs_create, tabs_close), read_page, get_page_text, computer, find, form_input, navigate, javascript_tool, resize_window, read_console_messages, read_network_requests, file_upload, upload_image, gif_creator. Execution stops at the first failure and reports how many actions were skipped. Tab context is appended once at the end. Click coordinates in a batch follow the last screenshot taken before the batch.',
     shape: {
       actions: z
         .array(z.object({ name: str.describe('Tool to run.'), input: z.record(z.string(), z.unknown()).describe('Arguments for that tool.') }))
@@ -403,7 +315,6 @@ const hinter = makeHinter()
 let sessionId = ''
 
 const T = (text: string): Piece => ({ type: 'text', text })
-const hintName = (name: string) => DEFS[name]?.hint ?? name
 // 先脱敏再截断；max_chars 为数字时不截断
 const polish = (text: string, noTrunc: boolean) => (noTrunc ? sanitizeText(text) : truncateOutput(sanitizeText(text)))
 const versionWarning = (info: { protocolVersion: number }) =>
@@ -424,7 +335,7 @@ async function chooseBrowser(): Promise<{ ok: true; conn: Conn; info: any } | { 
 async function withBrowser(name: string, args: any, body: (c: Ctx, info: any) => Promise<{ pieces: Piece[]; isError?: boolean }>): Promise<Result> {
   const noTrunc = typeof args?.max_chars === 'number'
   const done = (content: Piece[], isError: boolean): Result => {
-    const hint = hinter.note(hintName(name), args, isError)
+    const hint = hinter.note(name, args, isError)
     if (hint) content.push(T(hint))
     return { content, isError }
   }

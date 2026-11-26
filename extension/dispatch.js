@@ -3,7 +3,7 @@
 import { redactUrl, redactTitle } from './redact.js'
 import { beginCall, endCall, admit, resolveTabId, listTabs, joinGroup, closeSession, setTask } from './sessions.js'
 import { startGuard } from './guard.js'
-import { trackCall, pointIndicator } from './indicator.js'
+import { CURSOR_WAIT_MS, pointIndicator, trackCall, withIndicatorHidden } from './indicator.js'
 import { checkAbort, abortableSleep, stoppedError } from './abort.js'
 import { navigate as navigateTab } from './navigate.js'
 import { observe } from './observe.js'
@@ -276,14 +276,14 @@ const clicker = (label, button, count, intercept) => async (c) => {
   await c.recheck(label)
   const [x, y] = await resolvePoint(c, label)
   const mask = c.params.modifiers ? modifierMask(c.params.modifiers) : 0
-  await pointIndicator(c.tabId, x, y)
+  await pointIndicator(c.tabId, x, y, CURSOR_WAIT_MS) // 等光标走到再点（≤250ms），轨迹才看得见
   const token = intercept ? await beginClickInterception(c.tabId) : null
   const before = () => {
     checkAbort(c.signal)
     return c.g.check(`${label} (before press)`)
   }
   try {
-    await step(c.tabId, () => click(c.tabId, x, y, button, count, mask, before))
+    await withIndicatorHidden(c.tabId, () => step(c.tabId, () => click(c.tabId, x, y, button, count, mask, before)), [Math.round(x), Math.round(y)])
   } catch (e) {
     if (intercept) await abortClickInterception(token)
     throw e
@@ -334,6 +334,7 @@ const scrollAction = async (c) => {
   await c.recheck('scroll')
   const [x, y] = toViewport(c.tabId, coordinate, 'scroll')
   const [dx, dy] = DIRECTIONS[dir](amount * WHEEL_STEP_PX)
+  await pointIndicator(c.tabId, x, y, CURSOR_WAIT_MS)
   await step(c.tabId, async () => {
     let timer
     const timeout = new Promise((_, reject) => {
@@ -374,7 +375,7 @@ const ACTIONS = {
     pointNeeded(c.params)
     await c.recheck('hover')
     const [x, y] = await resolvePoint(c, 'hover')
-    await pointIndicator(c.tabId, x, y)
+    await pointIndicator(c.tabId, x, y, CURSOR_WAIT_MS)
     await step(c.tabId, () => hover(c.tabId, x, y))
     return { output: `hover @ ${describePoint(c.params)}` }
   },

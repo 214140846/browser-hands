@@ -1,9 +1,10 @@
 // 截图模块：可视区截图、区域放大、出图尺寸求解、坐标上下文与批次、按会话缓存图片。
-// 出图交给调试协议按目标尺寸直接生成，不在页面里用 canvas。
+// 出图交给调试协议按目标尺寸直接生成，不在页面里用 canvas。截图前后由 withIndicatorHidden 隐藏 / 恢复指示器。
 // 例外：Arc 的调试协议不肯缩放出图，改为原尺寸截下后在插件后台用 OffscreenCanvas 缩（见 shootScaledLocally）。
 import { browserKind } from './browser.js'
 import { send } from './debugger.js'
 import { sessionClosedHooks } from './sessions.js'
+import { withIndicatorHidden } from './indicator.js'
 
 // ---------- 常量 ----------
 const MAX_EDGE = 1568 // 长边上限
@@ -259,7 +260,7 @@ export async function screenshot(tabId, scale, guard) {
   const wantW = Math.max(1, Math.round(frameWidth * s))
   const wantH = Math.max(1, Math.round(frameHeight * s))
   const box = { x: vp.x, y: vp.y, width: vp.width, height: vp.height }
-  const shot = await shoot(tabId, 'jpeg', box, vp.dpr, wantW, wantH)
+  const shot = await withIndicatorHidden(tabId, () => shoot(tabId, 'jpeg', box, vp.dpr, wantW, wantH))
   setContext(tabId, { viewportWidth: vp.width, viewportHeight: vp.height, screenshotWidth: frameWidth, screenshotHeight: frameHeight })
   return { base64: shot.data, format: 'jpeg', width: shot.width, height: shot.height, frameWidth, frameHeight }
 }
@@ -290,7 +291,7 @@ export async function zoom(tabId, region, scale, guard) {
   const s = clampScale(scale)
   const wantW = Math.max(1, Math.min(physW, Math.round(tw * s)))
   const wantH = Math.max(1, Math.min(physH, Math.round(th * s)))
-  const shot = await shoot(tabId, 'png', box, vp.dpr, wantW, wantH)
+  const shot = await withIndicatorHidden(tabId, () => shoot(tabId, 'png', box, vp.dpr, wantW, wantH))
   return { base64: shot.data, format: 'png', width: shot.width, height: shot.height }
 }
 

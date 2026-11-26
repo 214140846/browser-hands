@@ -6,6 +6,8 @@ const fake = makeChrome()
 ;(globalThis as any).chrome = fake.chrome
 mock.module('../../extension/debugger.js', () => fake.debuggerModule)
 mock.module('../../extension/sessions.js', () => fake.sessionsModule)
+const hidden: number[] = []
+mock.module('../../extension/indicator.js', () => ({ withIndicatorHidden: async (tabId: number, fn: () => unknown) => (hidden.push(tabId), fn()) }))
 let browser = 'chrome'
 mock.module('../../extension/browser.js', () => ({ browserKind: async () => browser }))
 
@@ -52,6 +54,7 @@ beforeEach(() => {
   fake.state.override = undefined
   browser = 'chrome'
   encoded.length = 0
+  hidden.length = 0
   oversizeLocalAt = undefined
   endBatch()
 })
@@ -385,5 +388,19 @@ describe('zoom', () => {
     const g = { check: async () => { throw Object.assign(new Error('x'), { code: 'navigated_away' }) } }
     expect(await codeOf(zoom(freshTab(), [0, 0, 5, 5], 1, g))).toBe('navigated_away')
     expect(fake.shots()).toHaveLength(0)
+  })
+})
+
+describe('指示器隐藏', () => {
+  test('screenshot 与 zoom 的出图都包在 withIndicatorHidden 里，参数为该标签', async () => {
+    const t = freshTab()
+    await screenshot(t)
+    expect(hidden).toEqual([t])
+    await zoom(t, [0, 0, 100, 100], 1)
+    expect(hidden).toEqual([t, t])
+  })
+  test('越界 / 非法区域在隐藏之前就被拦下，不碰指示器', async () => {
+    await codeOf(zoom(freshTab(), [10, 10, 10, 20], 1))
+    expect(hidden).toEqual([])
   })
 })

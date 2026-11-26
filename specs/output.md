@@ -113,7 +113,7 @@
 
 `computer` 的动作可批量：`key`、`type`、`wait`、`left_click_drag`、`left_click`、`scroll_to`、`hover`、`right_click`、`triple_click`、`double_click`、`scroll`。
 
-明确不可批量的例子：`computer` 的 `screenshot`、`zoom`；工具 `read_page`、`find`、`browser_batch`、`jev_task`。
+明确不可批量的例子：`computer` 的 `screenshot`、`zoom`；工具 `read_page`、`find`、`browser_batch`。
 
 来由：对外接口词（工具名 / 动作名）。
 
@@ -123,46 +123,36 @@
 
 ### 6.1 可观察行为：调用序列 → 何时出提醒
 
-记「单调用」指提醒器收到的一次顶层调用；「点击」指 `computer` 的 `left_click` / `double_click` / `triple_click` / `right_click`。
+记「单调用」指提醒器收到的一次顶层调用。
 
 | 调用序列（均未出错，`isError` 为假） | 结果 |
 |---|---|
 | 连续 2 次第 5 节判定为可批量的顶层调用 | 第 2 次返回批量提醒；提醒后「连续单调用」从头数，再来 2 次才再提醒 |
 | 可批量调用之间夹了一次不可批量的顶层调用（如 `read_page`、`find`，或 `computer` 的 `screenshot` / `zoom`） | 连续单调用中断，不提醒 |
-| 可批量调用之间夹了一次 `browser_batch` 或 `jev_task` | 连续单调用中断，不提醒 |
-| 顶层 `computer` 点击 | **同时**计入「连续单调用」与「连续点击」两个计数 |
-| `computer` 的 `wait` / `scroll` | 计入连续单调用；对连续点击既不增也不断 |
-| `computer` 的 `screenshot` / `zoom` | 打断连续单调用；对连续点击不增不断（看一眼不算打断） |
-| 点击之间夹了任何其他调用（`find`、`navigate`、`jev_task` 等） | 连续点击归零 |
-| 连续点击累计到第 5 次 | 返回点击提醒；提醒后连续点击与连续单调用都归零 |
-| 一次 `browser_batch`，其 `input.actions`（`{name, input}` 数组）里依次含若干子动作 | 子动作按上面同样的口径累计点击（点击 +1；`screenshot` / `zoom` / `wait` / `scroll` 不增不断；其他或畸形子动作归零）；`browser_batch` 本身打断连续单调用；累计到 5 及以上则立即返回点击提醒，数字为当时累计值（含之前攒的点击） |
+| 可批量调用之间夹了一次 `browser_batch` | 连续单调用中断，不提醒 |
+| `computer` 的点击、`wait`、`scroll` 等可批量动作 | 计入连续单调用 |
+| `computer` 的 `screenshot` / `zoom` | 打断连续单调用 |
 | `isError` 为真 | 返回 `null`；不计入任何计数，也不打断任何计数 |
 | `input` 或 `actions` 缺失 / `null` / 非数组 / 含 `null` 项 | 不抛错，按没有子动作 / 不可批量处理 |
 
 典型例：
 - `navigate`、`navigate`、`navigate`、`navigate`：第 2、4 次提醒，其余 `null`。
 - `navigate`、`read_page`、`navigate`：全程 `null`。
-- 点击与 `screenshot` 交替共 5 次点击：第 5 次点击提醒，数字 5，之前全是 `null`；之后重新累计。
-- 一次 `browser_batch` 内含 7 次点击：点击提醒，数字 7。
-- 4 次点击后插一次 `find`，再点 1 次：`null`。
 
 ### 6.2 提醒的种类与归零
 
 | 提醒 | 触发 | 提醒后 |
 |---|---|---|
-| 点击提醒 | 连续点击达到 5 | 两个计数都归零 |
-| 批量提醒 | 连续单调用达到 2（且此刻点击提醒未触发） | 仅单调用归零，连续点击保持（之后的点击继续往上攒） |
+| 批量提醒 | 连续单调用达到 2 | 单调用归零 |
 
-同一次调用既满足点击又满足批量条件时，只返回点击提醒（并两项归零）。一次调用至多返回一条。
 
-两种提醒文本都整段被一对 `<system-reminder>` 标签包住（开标签在最前、闭标签在最后，协议约定，属接口）。点击提醒必须含 `quick_task` 与当前连续点击数的十进制数字；批量提醒必须含 `browser_batch` 且不得出现 `quick_task`。其余措辞、语言、长度自定，测试不断言。
+提醒文本整段被一对 `<system-reminder>` 标签包住（开标签在最前、闭标签在最后，协议约定，属接口）。提醒必须含 `browser_batch`。其余措辞、语言、长度自定，测试不断言。
 
 ### 6.4 常量来由
 
 | 常量 | 值 | 来由 |
 |---|---|---|
 | 触发批量提醒的连续单调用数 | 2 | 项目自定：一次就提醒太吵，两次已能看出是在一步步做可合并的事 |
-| 触发点击提醒的连续点击数 | 5 | 项目自定：连点五次基本是同一页面上的简单流程，值得整体委托给 `quick_task` |
 | 换行占预算 | 很小的额度 | 被切掉的换行符不能白占位，具体额度以 4.2 的例子为准 |
 | 默认上限 8000 | token | 项目自定：给模型上下文留余量的保守值，使用者可用环境变量调整 |
 | 估算比率（ASCII 每 4 字符 1 token，非 ASCII 每字 1 token） | — | 业界常用的粗估口径，只求量级不求精确 |

@@ -1,6 +1,6 @@
 const TEST_TMP = process.env.THUNDERMCP_TEST_TMP || '/tmp/thundermcp-test'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -14,8 +14,7 @@ mkdirSync(TEST_TMP, { recursive: true })
 const work = mkdtempSync(TEST_TMP + '/jev-polish-')
 const userDataDir = join(work, 'profile')
 const socketDir = join(work, 'sockets')
-const configPath = join(work, 'config.json')
-const env = { ...process.env, JEV_SOCKET_DIR: socketDir, JEV_CONFIG_PATH: configPath, JEV_PROVIDER: '', JEV_OPENROUTER_KEY: '', JEV_OPENROUTER_API_KEY: '', OPENROUTER_API_KEY: '', JEV_TYPESAFE_API_KEY: '', TYPESAFE_API_KEY: '' } as Record<string, string>
+const env = { ...process.env, JEV_SOCKET_DIR: socketDir } as Record<string, string>
 const socks = () => (existsSync(socketDir) ? readdirSync(socketDir).filter((f) => f.endsWith('.sock')) : [])
 
 async function until<T>(fn: () => T | undefined | false | Promise<T | undefined | false>, ms = 20000): Promise<T> {
@@ -56,20 +55,6 @@ test('提示：连续两次单独调可批量工具提醒 browser_batch；批量
   expect(g.note('computer', { action: 'key' }, false)).toBeNull()
   expect(g.note('browser_batch', { actions: [{ name: 'computer', input: { action: 'type' } }] }, false)).toBeNull()
   expect(g.note('computer', { action: 'screenshot' }, false)).toBeNull() // 截图不算可批量
-})
-
-test('提示：连续 5 次简单点击提醒 jev_task；中间打字就重新数', () => {
-  const h = makeHinter()
-  const click = () => h.note('computer', { action: 'left_click' }, false)
-  const seen = [click(), click(), click(), click(), click()].filter(Boolean).join('|')
-  expect(seen).toContain('quick_task')
-  const g = makeHinter()
-  for (let i = 0; i < 3; i++) g.note('computer', { action: 'left_click' }, false)
-  g.note('form_input', {}, false)
-  expect([1, 2, 3, 4].map(() => g.note('computer', { action: 'left_click' }, false)).join('')).not.toContain('quick_task')
-  const b = makeHinter()
-  const batch = { actions: Array.from({ length: 5 }, () => ({ name: 'computer', input: { action: 'left_click' } })) }
-  expect(b.note('browser_batch', batch, false)).toContain('quick_task')
 })
 
 // ---------- 真浏览器 ----------
@@ -135,7 +120,7 @@ test('工具输出超预算被截断，附怎么缩小；预算内的原样返�
   expect(full.text).not.toMatch(CUT)
 })
 
-test('只连续单独调可批量工具时提醒 browser_batch；连续点击提醒 jev_task', async () => {
+test('只连续单独调可批量工具时提醒 browser_batch', async () => {
   await open('/btn')
   const one = await tool(client, 'browser_batch', { actions: [{ name: 'computer', input: { action: 'wait', duration: 0.1, tabId: mainTab } }] })
   expect(one.text).not.toContain('system-reminder')
@@ -144,38 +129,19 @@ test('只连续单独调可批量工具时提醒 browser_batch；连续点击提
   expect(a.text).not.toContain('system-reminder')
   expect(b.text).toContain('system-reminder')
   expect(b.text).toContain('browser_batch')
-  const tree = await tool(client, 'read_page', { tabId: mainTab })
-  const ref = tree.text.match(/\[(ref_\d+)\]/)![1]
-  const outs: string[] = []
-  for (let i = 0; i < 5; i++) outs.push((await tool(client, 'computer', { action: 'left_click', ref, tabId: mainTab })).text)
-  expect(outs.join('\n')).toContain('quick_task')
 })
 
-test('设置页：存 profile 名、模型来源、key（只显示是否已设置）、点击方式；点击方式切到模拟事件后点击不再是可信事件', async () => {
+test('设置页：存 profile 名、点击方式；点击方式切到模拟事件后点击不再是可信事件', async () => {
   const p = await ctx.newPage()
   await p.goto(`chrome-extension://${extId()}/options.html`)
   await p.waitForSelector('body[data-ready]')
-  expect(await p.textContent('#keyState')).toContain('not set')
   await p.fill('#profileName', '测试号')
-  await p.selectOption('#provider', 'typesafe')
-  await p.fill('#key', 'sk-secret-123456')
-  await p.fill('#model', 'my-model')
   await p.selectOption('#clickMode', 'dom')
   await p.click('#save')
   await p.waitForFunction(() => document.getElementById('saved')!.textContent === 'Saved')
-  await until(() => existsSync(configPath))
-  const saved = JSON.parse(readFileSync(configPath, 'utf8'))
-  expect(saved).toMatchObject({ provider: 'typesafe', providers: { typesafe: { apiKey: 'sk-secret-123456', model: 'my-model' } } })
-  expect(statSync(configPath).mode & 0o777).toBe(0o600)
-  expect(await p.inputValue('#key')).toBe('') // 不回显
-  expect(await p.textContent('#keyState')).toContain('Key: set')
-  // 重新打开：还是只显示已设置，页面上找不到 key
   await p.reload()
   await p.waitForSelector('body[data-ready]')
-  expect(await p.textContent('#keyState')).toContain('Key: set')
-  expect(await p.inputValue('#provider')).toBe('typesafe')
   expect(await p.inputValue('#profileName')).toBe('测试号')
-  expect(await p.content()).not.toContain('sk-secret-123456')
   expect(await sw().evaluate(() => chrome.storage.local.get(['profileName', 'clickMode']))).toEqual({ profileName: '测试号', clickMode: 'dom' })
 
   // 点击方式 = dom：事件不是可信的

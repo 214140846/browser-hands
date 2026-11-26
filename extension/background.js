@@ -22,39 +22,7 @@ function connect() {
   })
 }
 
-// 插件主动问 host 的请求（目前只有 jev_balance）：id 用字符串，host 的应答没有 method，按 id 找回
-const asks = new Map()
-let askSeq = 0
-function askHost(method, params, ms = 12000) {
-  return new Promise((resolve) => {
-    if (!port) return resolve(null)
-    const id = `ask${++askSeq}`
-    const timer = setTimeout(() => (asks.delete(id), resolve(null)), ms)
-    asks.set(id, (v) => (clearTimeout(timer), resolve(v)))
-    port.postMessage({ id, method, params })
-  })
-}
-
-// 状态小窗打开时问一次余额；没连上 host / 超时返回 null，小窗显示「余额不可用」。不轮询
-chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (sender.id !== chrome.runtime.id || msg?.type !== 'getBalance') return
-  askHost('jev_balance', {}).then((r) => reply(r))
-  return true
-})
-
-// 设置页读写 Jev 模型来源：转给 host，key 只写不读（host 只回「是否已设置」）
-chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (sender.id !== chrome.runtime.id || msg?.type !== 'jevSettings') return
-  askHost(msg.op === 'set' ? 'jev_settings_set' : 'jev_settings_get', msg.patch ?? {}).then((r) => reply(r))
-  return true
-})
-
 async function onMessage(msg) {
-  if (msg && msg.method === undefined && asks.has(msg.id)) {
-    const done = asks.get(msg.id)
-    asks.delete(msg.id)
-    return done(msg.result ?? null)
-  }
   if (msg?.method === 'host_info') return setBrowser(msg.params?.browser)
   if (!msg || msg.id === undefined) return
   const reply = { id: msg.id }

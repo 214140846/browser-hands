@@ -1,6 +1,6 @@
 const TEST_TMP = process.env.THUNDERMCP_TEST_TMP || '/tmp/thundermcp-test'
 require('node:fs').mkdirSync(TEST_TMP, { recursive: true })
-// mcp 单测专用替身：stdio 传输（换成内存传输）、server/ 下 7 个同目录依赖、extension/redact 的替身。
+// mcp 单测专用替身：stdio 传输（换成内存传输）、server/ 下 6 个同目录依赖、extension/redact 的替身。
 // 只按 specs/mcp.md 依赖表的签名模拟；不是共享 fake。
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
@@ -33,27 +33,12 @@ export function makeFakes() {
     switchResult: undefined as any,
     switchCalls: [] as number[],
     noBrowserText: 'NO-BROWSER-EXPLAIN',
-    // jev
-    jev: { tag: 'the-jev' } as any,
-    jevError: undefined as Error | undefined,
-    jevCalls: 0,
-    // jev-task
-    taskStarts: [] as { conn: any; sid: string; params: any; jev: any }[],
-    taskStartResult: { taskId: 't-1', status: 'done' } as any,
-    taskStatus: { taskId: 't-1', status: 'running' } as any,
-    taskResult: { status: 'done', final: 'x' } as any,
-    taskStop: { status: 'stopped' } as any,
-    taskCalls: [] as { fn: string; id: string }[],
-    // jev-tools
+    // find-local
     parseCalls: [] as string[],
-    prefilterCalls: [] as { rows: any; query: string }[],
-    rankCalls: [] as any[],
-    rankResult: { candidates: [{ ref: 'ref_9', role: 'button', label: 'Go', p: 0.9 }], none: 0.1 } as any,
+    findCalls: [] as { rows: any; query: string }[],
+    findResult: [{ ref: 'ref_9', role: 'button', label: 'Go', p: 1 }] as any,
     formatResult: { ok: true, text: 'FOUND-TEXT' } as any,
     formatCalls: [] as any[],
-    findJson: { candidates: [{ ref: 'ref_9', p: 0.9 }], none: 0.1 } as any,
-    checkCalls: [] as any[],
-    checkResult: { p: 0.123456, cost: 0.00012345678, model: 'm-x' } as any,
     // output
     hintCalls: [] as { method: string; params: any; isError: boolean }[],
     hintImpl: (() => '') as Fn,
@@ -116,29 +101,10 @@ export function makeFakes() {
         return state.switchResult
       },
     },
-    jev: {
-      getJev: async () => {
-        state.jevCalls++
-        if (state.jevError) throw state.jevError
-        return state.jev
-      },
-    },
-    jevTask: {
-      startJevTask: async (c: any, sid: string, params: any, jev: any) => {
-        state.taskStarts.push({ conn: c, sid, params, jev })
-        return state.taskStartResult
-      },
-      jevStatus: (id: string) => (state.taskCalls.push({ fn: 'status', id }), state.taskStatus),
-      jevResult: (id: string) => (state.taskCalls.push({ fn: 'result', id }), state.taskResult),
-      jevStop: async (id: string) => (state.taskCalls.push({ fn: 'stop', id }), state.taskStop),
-    },
-    jevTools: {
+    findLocal: {
       parseTree: (s: string) => (state.parseCalls.push(s), [{ ref: 'row', role: 'r', name: 'n', line: s }]),
-      prefilter: (rows: any, query: string) => (state.prefilterCalls.push({ rows, query }), [...rows, { prefiltered: true }]),
-      rank: async (jev: any, opts: any) => (state.rankCalls.push({ jev, opts }), state.rankResult),
-      formatFind: (cands: any, none: any) => (state.formatCalls.push({ cands, none }), state.formatResult),
-      jevFindJson: (r: any) => (r === state.rankResult ? state.findJson : { wrong: true }),
-      check: async (jev: any, opts: any) => (state.checkCalls.push({ jev, opts }), state.checkResult),
+      findLocal: (rows: any, query: string) => (state.findCalls.push({ rows, query }), state.findResult),
+      formatFind: (cands: any) => (state.formatCalls.push({ cands }), state.formatResult),
     },
     output: {
       makeHinter: () => ({
@@ -188,23 +154,11 @@ export function makeFakes() {
     state.switchResult = undefined
     state.switchCalls.length = 0
     state.noBrowserText = 'NO-BROWSER-EXPLAIN'
-    state.jevCalls = 0
-    state.jevError = undefined
-    state.taskStarts.length = 0
-    state.taskCalls.length = 0
-    state.taskStartResult = { taskId: 't-1', status: 'done' }
-    state.taskStatus = { taskId: 't-1', status: 'running' }
-    state.taskResult = { status: 'done', final: 'x' }
-    state.taskStop = { status: 'stopped' }
     state.parseCalls.length = 0
-    state.prefilterCalls.length = 0
-    state.rankCalls.length = 0
+    state.findCalls.length = 0
     state.formatCalls.length = 0
-    state.checkCalls.length = 0
-    state.rankResult = { candidates: [{ ref: 'ref_9', role: 'button', label: 'Go', p: 0.9 }], none: 0.1 }
+    state.findResult = [{ ref: 'ref_9', role: 'button', label: 'Go', p: 1 }]
     state.formatResult = { ok: true, text: 'FOUND-TEXT' }
-    state.findJson = { candidates: [{ ref: 'ref_9', p: 0.9 }], none: 0.1 }
-    state.checkResult = { p: 0.123456, cost: 0.00012345678, model: 'm-x' }
     state.hintCalls.length = 0
     state.hintImpl = () => ''
     state.truncCalls.length = 0

@@ -36,12 +36,12 @@ const PAGE_BTN = `<button id="pb" style="position:fixed;left:350px;top:280px;wid
 const pageClicks = (p: Page) => p.evaluate(() => +(document.getElementById('pb')!.dataset.n || 0))
 
 describe('脚本形态', () => {
-  test('挂出恰好 5 个函数', async () => {
+  test('挂出恰好 9 个函数', async () => {
     const { page } = await fresh()
     const keys = await page.evaluate(() =>
       Object.entries((window as any).__jevIndicator).map(([k, v]) => [k, typeof v] as const),
     )
-    expect(keys.map(([k]) => k).sort()).toEqual(['hide', 'moveCursor', 'show', 'state', 'stopCenter'])
+    expect(keys.map(([k]) => k).sort()).toEqual(['hide', 'moveCenter', 'moveCursor', 'plan', 'restore', 'show', 'state', 'stopCenter', 'suppress'])
     expect(keys.every(([, t]) => t === 'function')).toBe(true)
   })
 
@@ -51,63 +51,14 @@ describe('脚本形态', () => {
     const img = await shot(page)
     expect(await injectCounting(page)).toBe(0)
     expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(before)
-    expect(await state(page)).toEqual({ border: false, stop: false, cursor: false })
+    expect(await state(page)).toMatchObject({ border: false, stop: false, cursor: false })
     expect(await center(page)).toBeNull()
     expect(same(await shot(page), img)).toBe(true)
   })
 
-  test('重复注入不替换对象、不影响已显示的指示器', async () => {
-    const { page } = await fresh()
-    await call(page, 'show')
-    await page.evaluate(() => ((window as any).__jevIndicator.marker = 1))
-    await inject(page)
-    expect(await page.evaluate(() => (window as any).__jevIndicator.marker)).toBe(1)
-    expect((await state(page)).stop).toBe(true)
-    expect(await axButtons(page)).toHaveLength(1)
-  })
-
-  test('show / hide / moveCursor 同步返回 true', async () => {
-    const { page } = await fresh()
-    const r = await page.evaluate(() => {
-      const I = (window as any).__jevIndicator
-      return [I.show(), I.moveCursor(10, 10), I.hide(), I.hide()]
-    })
-    expect(r).toEqual([true, true, true, true])
-  })
 })
 
 describe('show / hide', () => {
-  test('show 后边框和 Stop 都在；画面有变化；hide 后画面复原', async () => {
-    const { page, errors } = await fresh()
-    const blank = await shot(page)
-    await call(page, 'show')
-    expect(await state(page)).toEqual({ border: true, stop: true, cursor: false })
-    await settle(page)
-    expect(same(await shot(page), blank)).toBe(false)
-    await call(page, 'hide')
-    expect(await state(page)).toEqual({ border: false, stop: false, cursor: false })
-    expect(await center(page)).toBeNull()
-    await settle(page)
-    expect(same(await shot(page), blank)).toBe(true)
-    expect(errors).toEqual([])
-  })
-
-  test('可访问树：show 后恰好一个有名字的按钮，连调 show 不重复，hide 后消失', async () => {
-    const { page } = await fresh()
-    expect(await axButtons(page)).toEqual([])
-    await call(page, 'show')
-    let names = await axButtons(page)
-    expect(names).toHaveLength(1)
-    expect(names[0].trim().length).toBeGreaterThan(0)
-    await call(page, 'show')
-    expect(await axButtons(page)).toHaveLength(1)
-    await call(page, 'hide')
-    expect(await axButtons(page)).toEqual([])
-    await call(page, 'show')
-    names = await axButtons(page)
-    expect(names).toHaveLength(1)
-  })
-
   test('页面脚本拿不到指示器内部：文档里没有新增按钮，也没有可读的 shadowRoot', async () => {
     const { page } = await fresh('<p>x</p>')
     await call(page, 'show')
@@ -176,7 +127,7 @@ describe('Stop 按钮', () => {
     const [x, y] = (await center(page))!
     await page.mouse.click(x, y)
     expect(await sent(page)).toEqual([{ type: 'STOP' }])
-    expect(await state(page)).toEqual({ border: true, stop: true, cursor: false })
+    expect(await state(page)).toMatchObject({ border: true, stop: true, cursor: false })
     await page.mouse.click(x, y)
     expect(await stops(page)).toBe(2)
   })
@@ -194,17 +145,6 @@ describe('Stop 按钮', () => {
     }, [x, y])
     await settle(page, 200)
     expect(await sent(page)).toEqual([])
-  })
-
-  test('穿透封装、直接对 Stop 按钮脚本派发的点击同样无效；真点击仍有效', async () => {
-    const { page } = await fresh()
-    await call(page, 'show')
-    expect(await forgeClicks(page)).toBe(1)
-    await settle(page, 200)
-    expect(await sent(page)).toEqual([])
-    const [x, y] = (await center(page))!
-    await page.mouse.click(x, y)
-    expect(await stops(page)).toBe(1)
   })
 
   test('页面上有全屏高层级遮罩时，真点 Stop 仍然有效', async () => {
@@ -227,21 +167,13 @@ describe('Stop 按钮', () => {
     expect(errors).toEqual([])
   })
 
-  test('hide 后 Stop 原位置的真点击不发消息', async () => {
-    const { page } = await fresh()
-    await call(page, 'show')
-    const [x, y] = (await center(page))!
-    await call(page, 'hide')
-    await page.mouse.click(x, y)
-    expect(await sent(page)).toEqual([])
-  })
 })
 
 describe('moveCursor', () => {
   test('没 show 也能单独出光标；边框和 Stop 不出现', async () => {
     const { page } = await fresh()
     await call(page, 'moveCursor', 200, 150)
-    expect(await state(page)).toEqual({ border: false, stop: false, cursor: true })
+    expect(await state(page)).toMatchObject({ border: false, stop: false, cursor: true })
     expect(await axButtons(page)).toEqual([])
   })
 
@@ -257,21 +189,6 @@ describe('moveCursor', () => {
     expect(same(await shot(page, far), f0)).toBe(true)
   })
 
-  test('停留窗口：调用后 300ms 仍可见，2500ms 内消失', async () => {
-    const { page } = await fresh()
-    const [a, b] = await page.evaluate(async () => {
-      const I = (window as any).__jevIndicator
-      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
-      I.moveCursor(200, 150)
-      await wait(300)
-      const a = I.state().cursor
-      await wait(2200)
-      return [a, I.state().cursor]
-    })
-    expect(a).toBe(true)
-    expect(b).toBe(false)
-  })
-
   test('光标不挡点击：光标落在页面按钮上后立刻真点，页面收到', async () => {
     const { page } = await fresh(PAGE_BTN)
     await call(page, 'show')
@@ -280,47 +197,11 @@ describe('moveCursor', () => {
     expect(await pageClicks(page)).toBe(1)
   })
 
-  test('坐标落在 Stop 上：Stop 收起，真点该处不发 STOP 而是落到页面；下次 show 恢复', async () => {
-    const { page } = await fresh()
-    await call(page, 'show')
-    const [x, y] = (await center(page))!
-    // 在 Stop 正下方放一个页面元素，记录点击
-    await page.evaluate(([x, y]) => {
-      const d = document.createElement('div')
-      d.id = 'under'
-      d.style.cssText = `position:fixed;left:${x - 5}px;top:${y - 5}px;width:10px;height:10px`
-      d.onclick = () => (d.dataset.n = '1')
-      document.body.appendChild(d)
-    }, [x, y])
-    await call(page, 'moveCursor', x, y)
-    expect((await state(page)).stop).toBe(false)
-    await page.mouse.click(x, y)
-    expect(await sent(page)).toEqual([])
-    expect(await page.evaluate(() => document.getElementById('under')!.dataset.n)).toBe('1')
-
-    await call(page, 'show')
-    expect((await state(page)).stop).toBe(true)
-    const [x2, y2] = (await center(page))!
-    await page.mouse.click(x2, y2)
-    expect(await stops(page)).toBe(1)
-  })
-
-  test('Stop 被让位收起后，光标淡出也不自动恢复；show 才恢复', async () => {
-    const { page } = await fresh()
-    await call(page, 'show')
-    const [x, y] = (await center(page))!
-    await call(page, 'moveCursor', x, y)
-    await settle(page, 2500)
-    expect(await state(page)).toEqual({ border: true, stop: false, cursor: false })
-    await call(page, 'show')
-    expect((await state(page)).stop).toBe(true)
-  })
-
   test('坐标不在 Stop 上时 Stop 保持', async () => {
     const { page } = await fresh()
     await call(page, 'show')
     await call(page, 'moveCursor', 20, 20)
-    expect(await state(page)).toEqual({ border: true, stop: true, cursor: true })
+    expect(await state(page)).toMatchObject({ border: true, stop: true, cursor: true })
   })
 
   test('hide 打断停留中的光标：之后计时到点也不报错，状态保持全关', async () => {
@@ -328,21 +209,44 @@ describe('moveCursor', () => {
     await call(page, 'show')
     await call(page, 'moveCursor', 100, 100)
     await call(page, 'hide')
-    expect(await state(page)).toEqual({ border: false, stop: false, cursor: false })
+    expect(await state(page)).toMatchObject({ border: false, stop: false, cursor: false })
     await settle(page, 1500)
-    expect(await state(page)).toEqual({ border: false, stop: false, cursor: false })
+    expect(await state(page)).toMatchObject({ border: false, stop: false, cursor: false })
     expect(errors).toEqual([])
   })
 
-  test('非有限数字坐标不抛错，返回 true', async () => {
-    const { page, errors } = await fresh()
+})
+
+describe('新设计下仍成立的行为', () => {
+  test('重复注入不替换对象、不影响已显示的指示器', async () => {
+    const { page } = await fresh()
     await call(page, 'show')
-    const r = await page.evaluate(() => {
-      const I = (window as any).__jevIndicator
-      return [I.moveCursor(NaN, 1), I.moveCursor('a', 'b'), I.moveCursor(Infinity, -Infinity), I.moveCursor()]
-    })
-    expect(r).toEqual([true, true, true, true])
-    expect((await state(page)).border).toBe(true)
-    expect(errors).toEqual([])
+    await page.evaluate(() => ((window as any).__jevIndicator.marker = 1))
+    const before = await axButtons(page)
+    await inject(page)
+    expect(await page.evaluate(() => (window as any).__jevIndicator.marker)).toBe(1)
+    expect((await state(page)).stop).toBe(true)
+    expect(await axButtons(page)).toEqual(before)
+  })
+
+  test('穿透封装、直接对条内按钮脚本派发的点击无效；真点击 Stop 仍有效', async () => {
+    const { page } = await fresh()
+    await call(page, 'show')
+    expect(await forgeClicks(page)).toBeGreaterThanOrEqual(1)
+    await settle(page, 200)
+    expect(await sent(page)).toEqual([])
+    const [x, y] = (await center(page))!
+    await page.mouse.click(x, y)
+    expect(await stops(page)).toBe(1)
+  })
+
+  test('hide 淡出结束后，Stop 原位置的真点击不发消息', async () => {
+    const { page } = await fresh()
+    await call(page, 'show')
+    const [x, y] = (await center(page))!
+    await call(page, 'hide')
+    await settle(page, 600)
+    await page.mouse.click(x, y)
+    expect(await sent(page)).toEqual([])
   })
 })

@@ -10,7 +10,7 @@ import { writeHostManifest } from '../server/install'
 
 const root = resolve(import.meta.dir, '..')
 mkdirSync(TEST_TMP, { recursive: true })
-const work = mkdtempSync(TEST_TMP + '/jev-tools-')
+const work = mkdtempSync(TEST_TMP + '/tooltest-')
 const userDataDir = join(work, 'profile')
 const socketDir = join(work, 'sockets')
 const env = { ...process.env, JEV_SOCKET_DIR: socketDir } as Record<string, string>

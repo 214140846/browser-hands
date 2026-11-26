@@ -43,7 +43,7 @@ sh scripts/check.sh test/unit/keys.test.ts   # selected files
 
 `check` runs **each test file in its own process**. Some modules attach listeners to the global `chrome` object when they are imported, so running files together in one process makes them interfere with each other. The command prints one `ok` / `FAIL` line per file and exits non-zero if any file fails. Everything must be green before you open a PR.
 
-End-to-end tests (`test/*.test.ts`, drive a real Chrome with the extension loaded) run with `bun run test:e2e`. Tests prefixed `real-jev` need a Jev API key and skip themselves without one.
+End-to-end tests (`test/*.test.ts`, drive a real Chrome with the extension loaded) run with `bun run test:e2e`.
 
 ## Debugging the extension locally
 

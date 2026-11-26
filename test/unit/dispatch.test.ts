@@ -760,7 +760,8 @@ describe('computer：点击', () => {
     const r = await C({ action, coordinate: [10.4, 20.6] })
     expect(first('toViewport').args.slice(0, 2)).toEqual([100, [10.4, 20.6]])
     expectLabel(first('toViewport').args[2])
-    expect(first('pointIndicator').args).toEqual([100, 20.8, 41.2])
+    expect(first('pointIndicator').args).toEqual([100, 20.8, 41.2, 250]) // 等光标走到再点
+    expect(first('withIndicatorHidden').args[2]).toEqual([21, 41]) // 点击期间隐藏指示器，点位取整
     expect(first('beginClickInterception').args).toEqual([100])
     expect(first('withBackground').args[0]).toBe(100)
     const c = first('input.click').args
@@ -844,7 +845,7 @@ describe('computer：hover / type', () => {
   test('hover：动作名 hover 换算，指示，后台悬停，不拦新标签', async () => {
     const r = await C({ action: 'hover', coordinate: [5.5, 6] })
     expectLabel(first('toViewport').args[2])
-    expect(first('pointIndicator').args).toEqual([100, 11, 12])
+    expect(first('pointIndicator').args).toEqual([100, 11, 12, 250])
     expect(first('input.hover').args).toEqual([100, 11, 12])
     expect(f.named('beginClickInterception')).toHaveLength(0)
     expect(r.output).toMatch(/\b6\b/)
@@ -939,6 +940,7 @@ describe('computer：scroll / scroll_to', () => {
     expect(first('toViewport').args.slice(0, 2)).toEqual([100, [7, 8]])
     expectLabel(first('toViewport').args[2])
     expect(wheelArgs()).toEqual([100, 14, 16, 0, 300])
+    expect(first('pointIndicator').args).toEqual([100, 14, 16, 250]) // 滚动前光标先到位
     expect(r.output).toContain('down')
     expect(r.output).toContain('3')
   })
