@@ -452,6 +452,12 @@ describe('tabs_context_mcp / tabs_create_mcp / tabs_close_mcp', () => {
       initialTabId: 100,
     })
   })
+  test('带 session_name 才设任务名；不带不动', async () => {
+    await H('tabs_context_mcp', {})
+    expect(f.named('setTask')).toHaveLength(0)
+    await H('tabs_context_mcp', { session_name: '修登录' })
+    expect(first('setTask').args).toEqual([sess(), '修登录'])
+  })
   test('新建：在会话窗口里后台开空白页并入组', async () => {
     const r = await H('tabs_create_mcp', {})
     expect(first('tabs.create').args[0]).toEqual({ windowId: 8, active: false, url: 'about:blank' })

@@ -1,6 +1,7 @@
 const TEST_TMP = process.env.THUNDERMCP_TEST_TMP || '/tmp/thundermcp-test'
 require('node:fs').mkdirSync(TEST_TMP, { recursive: true })
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { basename } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { FAKE_PROTOCOL, makeFakes } from './fakes/mcp-deps'
 
@@ -99,7 +100,7 @@ const STR = { type: 'string' }
 const BOOL = { type: 'boolean' }
 const arr = (n: number) => ({ type: 'array', items: NUM, minItems: n, maxItems: n })
 const EXPECT: Record<string, { props: Record<string, any>; required: string[] }> = {
-  tabs_context_mcp: { props: { createIfEmpty: BOOL }, required: [] },
+  tabs_context_mcp: { props: { createIfEmpty: BOOL, session_name: STR }, required: [] },
   tabs_create_mcp: { props: {}, required: [] },
   tabs_close_mcp: { props: { tabId: NUM }, required: ['tabId'] },
   read_page: { props: { filter: { type: 'string', enum: ['interactive', 'all'] }, tabId: NUM, depth: NUM, ref_id: STR, max_chars: NUM }, required: [] },
@@ -422,6 +423,23 @@ describe('会话标识', () => {
     f.reset()
     await call('read_page')
     expect(new Set(S.calls.map((c) => c.sid))).toEqual(new Set([id]))
+  })
+
+  test('key 形如 客户端-8位hex@cwd 目录名；传给插件的 key 不因 session_name 改变', async () => {
+    await call('read_page')
+    const id = S.calls[0].sid as string
+    expect(id).toMatch(new RegExp(`^${CLIENT_NAME}-[0-9a-f]{8}@${basename(process.cwd())}$`))
+    f.reset()
+    await call('tabs_context_mcp', { session_name: '修登录' })
+    expect(new Set(S.calls.map((c) => c.sid))).toEqual(new Set([id]))
+  })
+
+  test('tabs_context_mcp 带 session_name：多发一次 { session_name } 给插件；不带则不发', async () => {
+    await call('tabs_context_mcp', { session_name: '修登录' })
+    expect(S.calls.filter((c) => c.method === 'tabs_context_mcp' && c.params?.session_name === '修登录')).toHaveLength(1)
+    f.reset()
+    await call('tabs_context_mcp')
+    expect(S.calls.some((c) => c.params?.session_name !== undefined)).toBe(false)
   })
 })
 

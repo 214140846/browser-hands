@@ -49,7 +49,7 @@
 
 | 插件方法 | 本模块发的参数 | 插件返回 |
 |---|---|---|
-| `tabs_context_mcp` | `{}` | `{ availableTabs: { tabId: number, title: string, url: string }[], tabGroupId, initialTabId }` |
+| `tabs_context_mcp` | `{}`；客户端给了 `session_name` 时，先多发一次 `{ session_name }`（插件据此设任务名） | `{ availableTabs: { tabId: number, title: string, url: string }[], tabGroupId, initialTabId }` |
 | `tabs_create_mcp` | `{}` | `{ tabId: number }` |
 | `tabs_close_mcp` | `{ tabId }` | `{ tabId: number }` |
 | `read_page` | 客户端给的参数原样 | `{ pageContent: string, viewport: { width: number, height: number }, tabId: number }` |
@@ -67,7 +67,7 @@
 
 | 工具 | 参数（类型；约束） | 必填 |
 |---|---|---|
-| `tabs_context_mcp` | `createIfEmpty`: boolean | 无 |
+| `tabs_context_mcp` | `createIfEmpty`: boolean；`session_name`: string（任务名，显示在标签组标题） | 无 |
 | `tabs_create_mcp` | 无参数 | 无 |
 | `tabs_close_mcp` | `tabId`: number | `tabId` |
 | `read_page` | `filter`: 字符串枚举 `interactive` \| `all`；`tabId`: number；`depth`: number；`ref_id`: string；`max_chars`: number | 无 |
@@ -127,7 +127,7 @@
 ### 5.2 会话标识
 
 - 在第一次**成功选到浏览器**的调用里确定，之后整个进程保持不变（没选到浏览器的调用不确定它）。
-- 形态：MCP 客户端在初始化握手里自报的名字 + `-` + 非空后缀；客户端没报名字时名字部分用 `agent`。后缀的字符集与长度自定，但要足以区分同名客户端的不同进程。
+- 形态：`<客户端名>-<8位hex>@<目录名>`。客户端名取自初始化握手（没报则用 `agent`）；8 位 hex 区分同名客户端的不同进程；`@` 后是 MCP 进程 cwd 的目录名（`path.basename(process.cwd())`），供插件做标签组显示名。整个串是内部 key，不直接给用户看。
 - 本模块对插件的**每一次** `conn.call`（含标签上下文查询、批处理开关、分段存放、`find` 内部读树）都是这同一个标识；内部查询的次数与时机不约束。
 
 ### 5.3 协议版本提醒
@@ -178,7 +178,7 @@
 
 | 工具 | 插件调用 | 结果文字 |
 |---|---|---|
-| `tabs_context_mcp` | `tabs_context_mcp`，参数恒为 `{}`（`createIfEmpty` 是否转发不约束） | 只有标签块；块内无「执行所在标签」。首个 JSON 行就是上面说的那一行 |
+| `tabs_context_mcp` | `tabs_context_mcp`，参数为 `{}`（`createIfEmpty` 是否转发不约束）；给了 `session_name` 时另有一次 `{ session_name }` 调用 | 只有标签块；块内无「执行所在标签」。首个 JSON 行就是上面说的那一行 |
 | `tabs_create_mcp` | `tabs_create_mcp`，`{}` | 说明新建了标签并含新标签 id（十进制），后接标签块 |
 | `tabs_close_mcp` | `tabs_close_mcp`，`{ tabId }`（客户端给的值） | 说明关了标签并含插件返回的 id，后接标签块 |
 

@@ -2,6 +2,7 @@
 // 设计：每个工具 = 「schema 形状 + 处理函数」，处理函数只产出 Out（文字 / 可选图片 / 是否要附标签块），
 // 通用流程（选浏览器、会话标识、脱敏、截断、提示器、错误收口）与 browser_batch 都复用同一批处理函数。
 import { randomUUID } from 'node:crypto'
+import { basename } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -80,7 +81,10 @@ async function prepareUpload(c: Ctx, a: any) {
   return { ...a, files }
 }
 
-const tabsContext: Handler = async (c) => ({ text: '', tabs: {} })
+const tabsContext: Handler = async (c, a) => {
+  if (typeof a?.session_name === 'string') await plug(c, 'tabs_context_mcp', { session_name: a.session_name })
+  return { text: '', tabs: {} }
+}
 const tabsCreate: Handler = async (c) => {
   const r = await plug(c, 'tabs_create_mcp', {})
   return { text: `Created a new tab, tabId ${r.tabId}.`, tabs: {} }
@@ -118,8 +122,11 @@ const xy = z.array(num).length(2)
 type Def = { desc: string; shape: z.ZodRawShape; run: Handler; batch?: boolean }
 const DEFS: Record<string, Def> = {
   tabs_context_mcp: {
-    desc: 'List the tabs in your dedicated tab group (id, title, URL). Call this first in a session and whenever you lose track of which tab is which. Pass createIfEmpty to open a starter tab when the group has none.',
-    shape: { createIfEmpty: bool.optional().describe('Create an initial tab if the group is empty.') },
+    desc: 'List the tabs in your dedicated tab group (id, title, URL). Call this first in a session and whenever you lose track of which tab is which. Pass createIfEmpty to open a starter tab when the group has none. On your first call also pass session_name, a short task name, so the user can tell which task owns this tab group.',
+    shape: {
+      createIfEmpty: bool.optional().describe('Create an initial tab if the group is empty.'),
+      session_name: z.string().optional().describe('Short task name (a few words) shown in the tab group title next to the project name. Set it on your first call.'),
+    },
     run: tabsContext,
     batch: true,
   },
@@ -335,7 +342,7 @@ async function withBrowser(name: string, args: any, body: (c: Ctx, info: any) =>
   try {
     const b = await chooseBrowser()
     if (!b.ok) return done([T(polish(b.text, noTrunc))], true)
-    if (!sessionId) sessionId = `${server.server.getClientVersion()?.name ?? 'agent'}-${randomUUID().slice(0, 8)}`
+    if (!sessionId) sessionId = `${server.server.getClientVersion()?.name ?? 'agent'}-${randomUUID().slice(0, 8)}@${basename(process.cwd()) || 'agent'}`
     const c: Ctx = { conn: b.conn, sid: sessionId }
     try {
       const r = await body(c, b.info)
