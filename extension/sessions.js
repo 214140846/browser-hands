@@ -13,7 +13,7 @@ export const sessionClosedHooks = [] // (tabIds, sessionId) => void；调试器�
 
 function load() {
   return (loaded ??= chrome.storage.session.get(['sessions', 'nextColor']).then((r) => {
-    for (const [k, v] of Object.entries(r.sessions ?? {})) sessions.set(k, { ...v, running: 0, timer: null })
+    for (const [k, v] of Object.entries(r.sessions ?? {})) sessions.set(k, { ...v, id: k, running: 0, timer: null })
     nextColor = r.nextColor ?? 0
   }))
 }
@@ -21,7 +21,7 @@ function load() {
 function save() {
   const out = {}
   for (const [k, s] of sessions) {
-    out[k] = { name: s.name, groupId: s.groupId, mainTabId: s.mainTabId, color: s.color, windowId: s.windowId }
+    out[k] = { name: s.name, task: s.task, groupId: s.groupId, mainTabId: s.mainTabId, color: s.color, windowId: s.windowId }
     if (s.tabIds) out[k].tabIds = s.tabIds
   }
   return chrome.storage.session.set({ sessions: out, nextColor })
@@ -34,7 +34,31 @@ function serial(fn) {
   return p
 }
 
-const titleOf = (s) => `${s.running > 0 ? '⌛' : '✅'} ${s.name}`
+const titleOf = (s) => `${s.running > 0 ? '⌛' : '✅'} ${s.name}${s.task ? ` · ${s.task}` : ''}`
+
+// 显示名：会话 key 形如 `<客户端>-<8位hex>@<目录名>`，取 @ 后的目录名；没有 @（旧格式）就用整个 key。
+// 与另一个存活会话重名时，后来的加 `·2`、`·3`…（取最小的空位）。
+const baseOf = (id) => {
+  const m = /-[0-9a-f]{8}@(.+)$/.exec(id)
+  return m ? m[1] : id
+}
+function uniqueName(base) {
+  const taken = new Set([...sessions.values()].map((s) => s.name))
+  if (!taken.has(base)) return base
+  for (let n = 2; ; n++) if (!taken.has(`${base}·${n}`)) return `${base}·${n}`
+}
+const cleanTask = (v) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
+
+// tabs_context_mcp 的 session_name：设为任务名并刷新标签组标题；空串清除
+export function setTask(s, name) {
+  const task = cleanTask(name)
+  if (task === (s.task ?? '')) return Promise.resolve()
+  s.task = task
+  return serial(async () => {
+    await syncGroup(s).catch(() => {})
+    await save()
+  })
+}
 export const tracksTabIds = (s) => Array.isArray(s.tabIds)
 const listed = tracksTabIds
 const groupsUnusable = async () => !chrome.tabGroups || (await browserKind()) === 'arc'
@@ -125,7 +149,7 @@ export async function beginCall(sessionId) {
   await load()
   let s = sessions.get(sessionId)
   if (!s) {
-    s = { name: sessionId, groupId: -1, mainTabId: -1, color: COLORS[nextColor++ % COLORS.length], windowId: -1, running: 0, timer: null }
+    s = { id: sessionId, name: uniqueName(baseOf(sessionId)), task: '', groupId: -1, mainTabId: -1, color: COLORS[nextColor++ % COLORS.length], windowId: -1, running: 0, timer: null }
     sessions.set(sessionId, s)
   }
   s.running++

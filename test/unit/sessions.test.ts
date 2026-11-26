@@ -10,6 +10,7 @@ const tabs = new Map<number, { id: number; windowId: number; groupId: number; ti
 let nextTab = 100
 let nextGroup = 1
 const grouped: any[] = []
+const updates: any[] = []
 const store: Record<string, any> = {}
 const onCreated = hub()
 const onRemoved = hub()
@@ -44,14 +45,14 @@ const chrome: any = {
   },
   tabGroups: {
     get: async (id: number) => ({ id, title: '', color: 'grey' }),
-    update: async () => {},
+    update: async (id: number, p: any) => void updates.push({ id, ...p }),
     onUpdated: hub(),
   },
 }
 ;(globalThis as any).chrome = chrome
 const { setBrowser } = await import('../../extension/browser.js')
 const mod: any = await import('../../extension/sessions.js')
-const { beginCall, endCall, joinGroup, admit, listTabs, tracksTabIds } = mod
+const { beginCall, endCall, joinGroup, admit, listTabs, tracksTabIds, setTask, closeSession } = mod
 
 let sid = 0
 const fresh = () => `s${++sid}`
@@ -116,11 +117,11 @@ describe('Arc：清单模式', () => {
     const extra = open()
     await joinGroup(s, extra.id)
     tabs.delete(s.mainTabId)
-    const s2 = await beginCall(s.name)
+    const s2 = await beginCall(s.id)
     expect(s2.mainTabId).toBe(extra.id)
     endCall(s2)
     tabs.delete(extra.id)
-    const s3 = await beginCall(s.name)
+    const s3 = await beginCall(s.id)
     expect(tabs.has(s3.mainTabId)).toBe(true)
     expect(s3.tabIds).toEqual([s3.mainTabId])
     endCall(s3)
@@ -156,3 +157,64 @@ describe('Chrome：组模式', () => {
     }
   })
 })
+
+describe('标签组显示名', () => {
+  beforeEach(async () => setBrowser('chrome'))
+  const key = (dir: string, h = Math.random().toString(16).slice(2, 10).padEnd(8, '0')) => `claude-code-${h}@${dir}`
+  const lastTitle = () => updates.filter((u) => u.title !== undefined).at(-1)?.title
+
+  test('显示名是目录名，随机后缀不进标题；内部 key 不变', async () => {
+    const id = key('proj', 'a1b2c3d4')
+    const s = await beginCall(id)
+    expect(s.id).toBe(id)
+    expect(s.name).toBe('proj')
+    expect(store.sessions[id].name).toBe('proj')
+    await endCallAndSync(s)
+    expect(lastTitle()).toBe('✅ proj')
+    expect(lastTitle()).not.toContain('a1b2c3d4')
+    await closeSession(id)
+  })
+
+  test('旧格式 key（没有 @目录）退回用整个 key', async () => {
+    const s = await beginCall('legacy-1')
+    expect(s.name).toBe('legacy-1')
+    await closeSession('legacy-1')
+  })
+
+  test('只有重名时才加后缀；关掉后名字释放', async () => {
+    const a = await beginCall(key('dup'))
+    const b = await beginCall(key('dup'))
+    const c = await beginCall(key('dup'))
+    const other = await beginCall(key('solo'))
+    expect([a.name, b.name, c.name, other.name]).toEqual(['dup', 'dup·2', 'dup·3', 'solo'])
+    await closeSession(b.id)
+    const d = await beginCall(key('dup'))
+    expect(d.name).toBe('dup·2')
+    for (const s of [a, c, d, other]) await closeSession(s.id)
+  })
+
+  test('setTask：标题带任务名；清空后去掉；超长截断', async () => {
+    const s = await beginCall(key('proj'))
+    await setTask(s, '  修登录  ')
+    expect(lastTitle()).toBe('⌛ proj · 修登录')
+    await setTask(s, 'x'.repeat(100))
+    expect(lastTitle()).toBe(`⌛ proj · ${'x'.repeat(40)}`)
+    await setTask(s, '')
+    expect(lastTitle()).toBe('⌛ proj')
+    await closeSession(s.id)
+  })
+
+  test('任务名随会话存盘', async () => {
+    const s = await beginCall(key('proj'))
+    await setTask(s, '写文档')
+    expect(store.sessions[s.id].task).toBe('写文档')
+    await closeSession(s.id)
+  })
+})
+
+// 空闲计时器要等 20s；测试里直接触发一次同步：用 setTask 的同名空串路径不行，改为设任务再清掉
+async function endCallAndSync(s: any) {
+  endCall(s)
+  await setTask(s, 'tmp')
+  await setTask(s, '')
+}

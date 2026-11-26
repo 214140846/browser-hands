@@ -206,6 +206,7 @@ export function makeFakes() {
     endCall: () => {},
     listTabs: async () => state.tabs,
     joinGroup: nothing,
+    setTask: nothing,
     admit: async (_s: any, tabId: number) => {
       if (!state.groupTabs.has(tabId)) throw Object.assign(new Error('outside'), { code: 'tab_outside_group' })
     },

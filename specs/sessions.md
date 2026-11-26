@@ -23,6 +23,7 @@ Arc 走清单模式的原因：Arc 有 `chrome.tabGroups`，但 `chrome.tabs.gro
 | `joinGroup` | `session, tabId: number` | `Promise<unknown>`：组模式入组；清单模式记进 `tabIds` |
 | `admit` | `session, tabId: number` | `Promise<void>`：不属于本会话时 reject，`code: 'tab_outside_group'` |
 | `tracksTabIds` | `session` | `boolean`：是否清单模式 |
+| `setTask` | `session, name: string` | `Promise<void>`：设任务名并刷新标题 |
 | `resolveTabId`、`closeSession`、`listSessions`、`sessionClosedHooks` | 不变 | 不变 |
 
 ## 3. 清单模式行为
@@ -38,3 +39,17 @@ Arc 走清单模式的原因：Arc 有 `chrome.tabGroups`，但 `chrome.tabs.gro
 | 清单里的标签被关 | 从 `tabIds` 划掉 |
 | 主标签被关、清单里还有别的 | 改用清单里第一个还开着的 |
 | 清单里全关了 | 再开一个 `about:blank` 当主标签 |
+
+## 4. 标签组显示名（组模式的标题）
+
+标题 = `<⌛|✅> <显示名>`，设了任务名则为 `<⌛|✅> <显示名> · <任务名>`。
+
+| 项 | 规则 |
+|---|---|
+| 内部 key | `sessionId` 不变，形如 `<客户端>-<8位hex>@<目录名>`，随机部分不进标题 |
+| 显示名 | 取 key 里 `-<8位hex>@` 之后的目录名；key 里没有这段（旧格式）就用整个 key |
+| 重名 | 只在新会话创建时判断：已有存活会话显示名相同，后来的加 `·2`、`·3`…（取最小的空位）；会话关闭后名字释放。选这个而不是随机后缀，是因为短、可读、无需存额外状态 |
+| 任务名 | `setTask(session, name)`，来自 `tabs_context_mcp` 的 `session_name`；空白合并、首尾去空、最长 40 字；空串清除；变更后立即刷新标题并存盘 |
+| 用户手改组名 | 仍按原有逻辑改回 `titleOf` 的结果（含任务名） |
+
+清单模式没有标签组，显示名 / 任务名只记在会话里（状态小窗用 `name`）。
