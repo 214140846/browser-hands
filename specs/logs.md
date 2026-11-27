@@ -8,7 +8,7 @@
 
 | 导出 | 形态 | 参数 | 返回 |
 |---|---|---|---|
-| `readConsole` | 异步函数 | `p: { tabId?: number, onlyErrors?: boolean, pattern?: string, limit?: number, clear?: boolean }`，`s: { mainTabId: number }`，`g?: { check(toolName: string): Promise<void> }` | `Promise<{ tabId: number, output: string }>` |
+| `readConsole` | 异步函数 | `p: { tabId?: number, onlyErrors?: boolean, pattern?: string, limit?: number, clear?: boolean, jsonKeys?: string[] }`，`s: { mainTabId: number }`，`g?: { check(toolName: string): Promise<void> }` | `Promise<{ tabId: number, output: string }>` |
 | `readNetwork` | 异步函数 | `p: { tabId?: number, urlPattern?: string, limit?: number, clear?: boolean }`，`s`、`g` 同上 | `Promise<{ tabId: number, output: string }>` |
 
 只有这两个导出。
@@ -137,6 +137,7 @@ CDP 事件、`tabs.onUpdated`、`tabs.onRemoved`、会话关闭这四个处理�
 | `pattern` 不是合法正则 | 不区分大小写的子串包含 |
 | `limit` | 默认 100；从最早的开始取前 `limit` 条 |
 | `clear` 为真 | 本次照常返回，之后清空该标签**全部**控制台记录（包括没匹配上的） |
+| `jsonKeys` 非空 | 只改条目正文的显示，不影响筛选：`onlyErrors`、`pattern` 仍对完整正文判断。正文去掉首尾空白后以 `{` 或 `[` 开头且能整段解析成 JSON 时，显示为一行紧凑 JSON（无缩进），只保留键名在 `jsonKeys` 里的字段（任意深度，值整段保留），以及通往它们的上层对象和数组；没有命中字段的对象 / 数组元素去掉。整段一个都没命中时显示 `{}`（顶层是数组时 `[]`）。不以 `{` / `[` 开头或解析失败（含被截断的长正文）时原样显示 |
 
 ### readNetwork 筛选
 
@@ -189,6 +190,8 @@ CDP 事件、`tabs.onUpdated`、`tabs.onRemoved`、会话关闭这四个处理�
 - `limit` 为 0：标题照常给总数，没有条目。
 - `pattern` 为空串：视为没给。
 - 读取时 `onlyErrors` 与 `pattern` 同时给：两个条件都要满足。
+- `jsonKeys` 为空数组、不是数组、或去掉非字符串和空串后为空：视为没给。
+- `console.log(对象)` 的正文是 CDP 给的描述（如 `Object`），不是 JSON，`jsonKeys` 对它不起作用。
 - 同一标签控制台与网络共用一次收集开关：读任一个都会让两类事件开始收集。
 - 已停止收集的标签，记录还在，`counts` 仍能看到；再读时能读到停止前收集的内容。
 - 被丢掉的旧请求之后又来了同 id 的响应：忽略，不新增条目。

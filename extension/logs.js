@@ -225,6 +225,47 @@ function makeMatcher(pattern) {
   }
 }
 
+// 只留下给定字段名，以及通往它们的上层对象 / 数组；什么都没留下时返回 undefined
+function pickKeys(v, keys) {
+  if (Array.isArray(v)) {
+    const kept = v.map((x) => pickKeys(x, keys)).filter((x) => x !== undefined)
+    return kept.length ? kept : undefined
+  }
+  if (v && typeof v === 'object') {
+    const out = {}
+    for (const [k, x] of Object.entries(v)) {
+      if (keys.has(k)) out[k] = x
+      else {
+        const sub = pickKeys(x, keys)
+        if (sub !== undefined) out[k] = sub
+      }
+    }
+    return Object.keys(out).length ? out : undefined
+  }
+  return undefined
+}
+
+// jsonKeys：正文整段是 JSON 对象 / 数组时，压成只含这些字段的一行；否则原样
+function projectBody(body, keys) {
+  if (!keys) return body
+  const t = body.trim()
+  if (!(t.startsWith('{') || t.startsWith('['))) return body
+  let v
+  try {
+    v = JSON.parse(t)
+  } catch {
+    return body
+  }
+  const kept = pickKeys(v, keys)
+  return kept === undefined ? (Array.isArray(v) ? '[]' : '{}') : JSON.stringify(kept)
+}
+
+function keySet(list) {
+  if (!Array.isArray(list)) return null
+  const keys = list.filter((k) => typeof k === 'string' && k !== '')
+  return keys.length ? new Set(keys) : null
+}
+
 export async function readConsole(p, s, g) {
   return withTab('read_console_messages', 'Could not read console output', p, s, g, (b) => {
     const q = p || {}
@@ -238,8 +279,9 @@ export async function readConsole(p, s, g) {
     }
     let head = `${rows.length} ${q.onlyErrors ? 'error' : 'console'} entries captured`
     if (shown.length < rows.length) head += ` — listing the oldest ${shown.length}`
+    const keys = keySet(q.jsonKeys)
     const blocks = shown.map((e, i) => {
-      const lines = [`#${i + 1} ${clock(e.at)} ${e.kind.toUpperCase()}${e.place ? ` (${e.place})` : ''}`, `  ${e.body}`]
+      const lines = [`#${i + 1} ${clock(e.at)} ${e.kind.toUpperCase()}${e.place ? ` (${e.place})` : ''}`, `  ${projectBody(e.body, keys)}`]
       for (const f of e.stack) lines.push(`    at ${f}`)
       return lines.join('\n')
     })

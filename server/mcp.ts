@@ -250,6 +250,7 @@ const DEFS: Record<string, Def> = {
       clear: bool.optional().describe('Empty the buffer after reading.'),
       pattern: str.optional().describe('Regular expression; keep only messages that match.'),
       limit: num.optional().describe('Maximum number of messages to return.'),
+      jsonKeys: z.array(z.string()).optional().describe('Field names to keep when a message body is a JSON object or array: each such body is returned as one compact JSON line holding only these keys (at any depth) and the objects and arrays that lead to them. Other bodies are returned unchanged. pattern still matches the full body.'),
     },
     run: forward('read_console_messages'),
     batch: true,
