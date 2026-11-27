@@ -316,7 +316,8 @@ const DEFS: Record<string, Def> = {
 }
 
 // ---------- 服务器与通用流程 ----------
-const server = new McpServer({ name: 'thundermcp', version: '0.2.1' }, { instructions: INSTRUCTIONS })
+const SERVER_VERSION = '0.2.1'
+const server = new McpServer({ name: 'thundermcp', version: SERVER_VERSION }, { instructions: INSTRUCTIONS })
 const hinter = makeHinter()
 let sessionId = ''
 
@@ -327,6 +328,18 @@ const versionWarning = (info: { protocolVersion: number }) =>
   info.protocolVersion === PROTOCOL_VERSION
     ? ''
     : `Version mismatch: the browser extension speaks protocol ${info.protocolVersion} but this server expects ${PROTOCOL_VERSION}. Update the extension and restart the browser (or reload the extension) so both sides match.`
+
+// 插件版本低于服务端：session_name 等新参数会被旧插件悄悄忽略，所以在 tabs_context_mcp 结果里提醒重新加载
+const verParts = (v: unknown) => String(v ?? '').split('.').map((n) => parseInt(n, 10) || 0)
+const olderThan = (a: unknown, b: string) => {
+  const [x, y] = [verParts(a), verParts(b)]
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0)
+  return false
+}
+const staleExtensionHint = (info: { extensionVersion?: string }) =>
+  info.extensionVersion && olderThan(info.extensionVersion, SERVER_VERSION)
+    ? `The browser extension is still an old version (${info.extensionVersion}, server ${SERVER_VERSION}), so new features such as session_name do not work. Reload the extension at chrome://extensions.`
+    : ''
 
 type Result = { content: Piece[]; isError: boolean }
 
@@ -369,7 +382,7 @@ async function runOne(name: string, args: any): Promise<Result> {
     const out = await def.run(c, args)
     let text = out.text
     if (out.tabs) text += `${text ? '\n\n' : ''}${await tabBlock(c, out.tabs.exec)}`
-    const warn = versionWarning(info)
+    const warn = [versionWarning(info), name === 'tabs_context_mcp' ? staleExtensionHint(info) : ''].filter(Boolean).join('\n\n')
     const body = polish(text, noTrunc) + (warn ? `\n\n${sanitizeText(warn)}` : '')
     const pieces: Piece[] = [T(body)]
     if (out.image) pieces.push({ type: 'image', ...out.image })
