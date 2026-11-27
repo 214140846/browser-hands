@@ -365,6 +365,66 @@ describe('控制台读取与过滤', () => {
     expect(await con(t)).not.toContain('unmatched')
   })
 
+  test('jsonKeys：JSON 正文压成一行，只留这些字段及其上层结构，数组照样展开', async () => {
+    const t = tab()
+    await con(t)
+    const body = { payload: { events: [
+      { name: 'a', params: { label: 'x', big: 'zzz-drop' }, env: 'test', noise: 1 },
+      { name: 'b', params: { big: 'zzz-drop' } },
+      { other: 'zzz-drop' },
+    ] }, result: true }
+    msg(t, 'log', JSON.stringify(body, null, 2))
+    const out = await con(t, { jsonKeys: ['name', 'label', 'env'] })
+    expect(out).toContain('{"payload":{"events":[{"name":"a","params":{"label":"x"},"env":"test"},{"name":"b"}]}}')
+    expect(out).not.toContain('zzz-drop')
+    expect(out).not.toContain('noise')
+  })
+
+  test('jsonKeys：命中字段的值整段保留', async () => {
+    const t = tab()
+    await con(t)
+    msg(t, 'log', JSON.stringify({ a: { ext: { k1: 1, k2: [2, 3] }, drop: 'zzz-drop' } }))
+    const out = await con(t, { jsonKeys: ['ext'] })
+    expect(out).toContain('{"a":{"ext":{"k1":1,"k2":[2,3]}}}')
+    expect(out).not.toContain('zzz-drop')
+  })
+
+  test('jsonKeys：非 JSON、解析失败的正文原样；JSON 里一个字段都没命中时给空结构', async () => {
+    const t = tab()
+    await con(t)
+    msg(t, 'log', 'plain text {not json')
+    msg(t, 'log', '{"broken": ')
+    msg(t, 'log', '{"x": 1}')
+    msg(t, 'log', '[{"x": 1}]')
+    const out = await con(t, { jsonKeys: ['name'] })
+    expect(out).toContain('plain text {not json')
+    expect(out).toContain('{"broken": ')
+    expect(out).toMatch(/^\s+\{\}$/m)
+    expect(out).toMatch(/^\s+\[\]$/m)
+  })
+
+  test('jsonKeys：在脱敏后的正文上裁剪，保留的网址仍是脱敏后的', async () => {
+    const t = tab()
+    await con(t)
+    msg(t, 'log', JSON.stringify({ e: { url: 'https://api.example.com/v1?token=json123secret', drop: 1 } }, null, 2))
+    const out = await con(t, { jsonKeys: ['url'] })
+    expect(out).toMatch(/\{"e":\{"url":"[^"]*api\.example\.com[^"]*"\}\}/)
+    expect(out).not.toContain('json123secret')
+    expect(out).not.toContain('drop')
+  })
+
+  test('jsonKeys：pattern 仍按完整正文匹配；空数组或不给时行为不变', async () => {
+    const t = tab()
+    await con(t)
+    const raw = JSON.stringify({ name: 'n', hidden: 'needle-zzz' }, null, 2)
+    msg(t, 'log', raw)
+    const out = await con(t, { pattern: 'needle-zzz', jsonKeys: ['name'] })
+    expect(out).toContain('{"name":"n"}')
+    expect(out).not.toContain('needle-zzz')
+    expect(await con(t, { jsonKeys: [] })).toContain(raw)
+    expect(await con(t)).toContain(raw)
+  })
+
   test('没有结果时：不含任何条目，提示刷新页面', async () => {
     const t = tab()
     msg(t, 'log', 'nope')

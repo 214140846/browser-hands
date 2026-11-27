@@ -79,7 +79,7 @@
 | `browser_batch` | `actions`: 数组，元素是对象 `{ name: string, input: 对象（键为字符串、值任意） }`，元素内 `name`、`input` 都必填 | `actions` |
 | `resize_window` | `width`: number；`height`: number；`tabId`: number | 三者 |
 | `javascript_tool` | `action`: string（**任意字符串，不是枚举**）；`text`: string；`tabId`: number | 三者 |
-| `read_console_messages` | `tabId`: number；`onlyErrors`: boolean；`clear`: boolean；`pattern`: string；`limit`: number | `tabId` |
+| `read_console_messages` | `tabId`: number；`onlyErrors`: boolean；`clear`: boolean；`pattern`: string；`limit`: number；`jsonKeys`: string[] | `tabId` |
 | `read_network_requests` | `tabId`: number；`urlPattern`: string；`clear`: boolean；`limit`: number | `tabId` |
 | `file_upload` | `files`: 数组，元素对象 `{ data: string, name: string, mimeType?: string }`（`data`、`name` 必填）；`paths`: string[]；`ref`: string；`tabId`: number | `ref`、`tabId` |
 | `upload_image` | `imageId`: string；`ref`: string；`coordinate`: number[]，长度恰为 2；`tabId`: number；`filename`: string | `imageId`、`tabId` |

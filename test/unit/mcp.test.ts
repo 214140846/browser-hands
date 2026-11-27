@@ -129,7 +129,7 @@ const EXPECT: Record<string, { props: Record<string, any>; required: string[] }>
   browser_batch: { props: { actions: { type: 'array', items: { type: 'object', required: ['name', 'input'], props: { name: STR, input: { type: 'object' } } } } }, required: ['actions'] },
   resize_window: { props: { width: NUM, height: NUM, tabId: NUM }, required: ['width', 'height', 'tabId'] },
   javascript_tool: { props: { action: STR, text: STR, tabId: NUM }, required: ['action', 'text', 'tabId'] },
-  read_console_messages: { props: { tabId: NUM, onlyErrors: BOOL, clear: BOOL, pattern: STR, limit: NUM }, required: ['tabId'] },
+  read_console_messages: { props: { tabId: NUM, onlyErrors: BOOL, clear: BOOL, pattern: STR, limit: NUM, jsonKeys: { type: 'array', items: STR } }, required: ['tabId'] },
   read_network_requests: { props: { tabId: NUM, urlPattern: STR, clear: BOOL, limit: NUM }, required: ['tabId'] },
   file_upload: {
     props: { files: { type: 'array', items: { type: 'object', required: ['data', 'name'], props: { data: STR, name: STR, mimeType: STR } } }, paths: { type: 'array', items: STR }, ref: STR, tabId: NUM },
@@ -317,7 +317,7 @@ describe('带 output 的动作', () => {
     ['navigate', { url: 'x.test', tabId: 5, force: true }],
     ['javascript_tool', { action: 'javascript_exec', text: '1+1', tabId: 5 }],
     ['resize_window', { width: 800, height: 600, tabId: 5 }],
-    ['read_console_messages', { tabId: 5, onlyErrors: true, pattern: 'x', limit: 3, clear: true }],
+    ['read_console_messages', { tabId: 5, onlyErrors: true, pattern: 'x', limit: 3, clear: true, jsonKeys: ['a'] }],
     ['read_network_requests', { tabId: 5, urlPattern: '/api', limit: 3, clear: false }],
     ['upload_image', { imageId: 'img', ref: 'ref_3', tabId: 5, filename: 'a.png' }],
     ['gif_creator', { action: 'start_recording', tabId: 5, options: { quality: 3 } }],
