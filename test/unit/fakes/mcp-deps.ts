@@ -25,7 +25,7 @@ export function makeFakes() {
     // registry
     pickResult: undefined as any,
     pluginProtocol: FAKE_PROTOCOL as number,
-    pluginVersion: '0.2.1' as string | undefined,
+    pluginVersion: '0.2.2' as string | undefined,
     refreshCount: 0,
     refreshInfoCount: 0,
     onlineList: [{ info: { profileId: 'p1' } }] as any[],
@@ -147,7 +147,7 @@ export function makeFakes() {
     ]
     state.pickResult = undefined
     state.pluginProtocol = FAKE_PROTOCOL
-    state.pluginVersion = '0.2.1'
+    state.pluginVersion = '0.2.2'
     state.refreshCount = 0
     state.refreshInfoCount = 0
     state.onlineList = [{ info: { profileId: 'p1' } }]

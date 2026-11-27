@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { DEFAULT_MODEL, askJev, buildPrompt, pickCandidates, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
+import { DEFAULT_MODEL, testConnection, askJev, buildPrompt, pickCandidates, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
 
 const TREE = ['button "Sign in" [ref_1]', 'link "Help" [ref_2]', 'textbox "Email" [ref_3]'].join('\n')
 const KEY = 'sk-secret-123'
@@ -123,12 +123,12 @@ describe('Jev 格式（模型名含 jev）', () => {
     }
     return { calls, fetch }
   }
-  test('缺省模型是 jev，走 /systemone，不走 /chat/completions', async () => {
-    expect(DEFAULT_MODEL).toBe('jev')
+  test('缺省模型是 jev-latest，走 /systemone，不走 /chat/completions', async () => {
+    expect(DEFAULT_MODEL).toBe('jev-latest')
     const r = jevReply({ c0: { choice: 'yes', probabilities: { yes: 0.9, no: 0.1 } }, c1: { choice: 'no' }, c2: { choice: 'no' } })
     const out = await findAi({ query: 'sign in', pageContent: TREE }, { storage: store(jevCfg), fetch: r.fetch })
     expect(r.calls[0].url).toBe('https://api.test/v1/systemone')
-    expect(r.calls[0].body.model).toBe('jev')
+    expect(r.calls[0].body.model).toBe('jev-latest')
     expect(out).toEqual({ enabled: true, text: 'Found 1 matching element\n\n- ref_1: button "Sign in"' })
   })
   test('候选按词重合排序，最多 20 个，只收带 ref 标记的行', () => {
@@ -150,5 +150,41 @@ describe('Jev 格式（模型名含 jev）', () => {
     const r = jevReply({})
     expect((await askJev({ baseUrl: 'u', key: 'k', model: 'jev' }, 'q', 'plain text', r.fetch)).total).toBe(0)
     expect(r.calls).toHaveLength(0)
+  })
+  test('中文查询按单字重合排序', () => {
+    const t = ['link "首页" [ref_1]', 'button "登录" [ref_2]', 'link "帮助" [ref_3]'].join('\n')
+    expect(pickCandidates('登录按钮', t)[0].ref).toBe('ref_2')
+  })
+  test('模型 ERROR 文字里的密钥被抹掉', async () => {
+    const r = reply(`FOUND: 0\nERROR: nothing for ${KEY}`)
+    const e = await findAi({ query: 'q', pageContent: TREE }, { storage: store(cfg), fetch: r.fetch }).then(() => null, (x) => x)
+    expect(e.code).toBe('find_no_match')
+    expect(e.message).not.toContain(KEY)
+  })
+})
+
+describe('testConnection', () => {
+  const ok = (json: any, status = 200, body = '') => async () => ({ ok: status < 400, status, json: async () => json, text: async () => body })
+  test('Jev 格式：有 answers.c0 算通，走 /systemone', async () => {
+    let url = ''
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'jev-latest' }, async (u: string, o: any) => { url = u; return { ok: true, status: 200, json: async () => ({ answers: { c0: { choice: 'yes' } } }), text: async () => '' } })
+    expect(r).toMatchObject({ ok: true, format: 'Jev' })
+    expect(url).toBe('https://a.test/v1/systemone')
+  })
+  test('OpenAI 格式：有文本算通，走 /chat/completions', async () => {
+    const rr = reply('ok')
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'gpt-x' }, rr.fetch)
+    expect(r).toMatchObject({ ok: true, format: 'OpenAI' })
+    expect(rr.calls[0].url).toBe('https://a.test/v1/chat/completions')
+    expect((await testConnection({ baseUrl: 'u', key: 'k', model: 'gpt-x' }, reply('  ').fetch)).ok).toBe(false)
+  })
+  test('失败：返回原因，抹掉密钥', async () => {
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'jev' }, ok({}, 400, `Unknown model, key ${KEY}`))
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('400')
+    expect(r.error).not.toContain(KEY)
+  })
+  test('Jev 响应没有答案算失败', async () => {
+    expect((await testConnection({ baseUrl: 'u', key: 'k', model: 'jev' }, ok({ answers: {} }))).ok).toBe(false)
   })
 })

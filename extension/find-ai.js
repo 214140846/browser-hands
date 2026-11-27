@@ -1,7 +1,7 @@
 // find 的可选小模型：用户在设置页配了接口地址 + 密钥才启用；没配返回 { enabled: false }，服务端走本地打分。
 // 密钥只存在 chrome.storage.local，请求由扩展自己发；错误文字里的密钥一律抹掉。
 
-export const DEFAULT_MODEL = 'jev'
+export const DEFAULT_MODEL = 'jev-latest'
 export const REQUEST_TIMEOUT_MS = 30000
 export const MAX_RESULTS = 20
 // 存储键与缺省值集中在一处
@@ -131,7 +131,8 @@ export const JEV_MAX_CANDIDATES = 20
 const REF_MARK = /\[((?:f\d+:)?ref_\d+)\]/
 
 export function pickCandidates(query, tree) {
-  const words = String(query).toLowerCase().split(/\s+/).filter(Boolean)
+  const q = String(query).toLowerCase()
+  const words = [...q.split(/\s+/).filter(Boolean), ...(q.match(/[\u3400-\u9fff]/g) ?? [])] // 中文没有空格：每个汉字也算一个词
   return String(tree)
     .split('\n')
     .map((l) => l.trim())
@@ -163,6 +164,24 @@ export async function askJev(cfg, query, tree, fetchImpl) {
   return { ...empty, total: items.length, items, errorText: items.length ? '' : 'No matching elements found' }
 }
 
+// 设置页「Test」：按当前格式发一个最小请求，只报通不通；返回 { ok, format, ms } 或 { ok:false, error }
+export async function testConnection(cfg, fetchImpl) {
+  const format = isJevModel(cfg.model) ? 'Jev' : 'OpenAI'
+  const t0 = performance.now()
+  try {
+    if (format === 'Jev') {
+      const questions = { c0: { type: 'choice', instructions: 'Is state.word the text "test"?', criteria: { yes: 'It is', no: 'It is not' } } }
+      const data = await postJson(cfg, '/systemone', { model: cfg.model, state: { word: 'test' }, questions }, fetchImpl)
+      if (!data?.answers?.c0) throw new Error('response had no answer')
+    } else {
+      await askModel(cfg, 'Reply with one word: ok', fetchImpl)
+    }
+    return { ok: true, format, ms: Math.round(performance.now() - t0) }
+  } catch (e) {
+    return { ok: false, format, error: scrub(e?.message ?? e, cfg.key) }
+  }
+}
+
 const withCode = (code, message) => Object.assign(new Error(message), { code })
 
 // 入口：{ enabled: false } 或 { enabled: true, text }；失败抛 find_exception / find_no_match
@@ -176,6 +195,6 @@ export async function findAi({ query, pageContent }, deps = {}) {
     throw withCode('find_exception', `Failed to find element: ${scrub(e?.message ?? e, cfg.key)}`)
   }
   const r = formatOutput(parsed)
-  if (!r.ok) throw withCode(r.code, r.error)
+  if (!r.ok) throw withCode(r.code, scrub(r.error, cfg.key))
   return { enabled: true, text: r.text }
 }
