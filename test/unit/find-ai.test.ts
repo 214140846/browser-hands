@@ -123,12 +123,12 @@ describe('Jev 格式（模型名含 jev）', () => {
     }
     return { calls, fetch }
   }
-  test('缺省模型是 jev，走 /systemone，不走 /chat/completions', async () => {
-    expect(DEFAULT_MODEL).toBe('jev')
+  test('缺省模型是 jev-latest，走 /systemone，不走 /chat/completions', async () => {
+    expect(DEFAULT_MODEL).toBe('jev-latest')
     const r = jevReply({ c0: { choice: 'yes', probabilities: { yes: 0.9, no: 0.1 } }, c1: { choice: 'no' }, c2: { choice: 'no' } })
     const out = await findAi({ query: 'sign in', pageContent: TREE }, { storage: store(jevCfg), fetch: r.fetch })
     expect(r.calls[0].url).toBe('https://api.test/v1/systemone')
-    expect(r.calls[0].body.model).toBe('jev')
+    expect(r.calls[0].body.model).toBe('jev-latest')
     expect(out).toEqual({ enabled: true, text: 'Found 1 matching element\n\n- ref_1: button "Sign in"' })
   })
   test('候选按词重合排序，最多 20 个，只收带 ref 标记的行', () => {

@@ -1,7 +1,7 @@
 // find 的可选小模型：用户在设置页配了接口地址 + 密钥才启用；没配返回 { enabled: false }，服务端走本地打分。
 // 密钥只存在 chrome.storage.local，请求由扩展自己发；错误文字里的密钥一律抹掉。
 
-export const DEFAULT_MODEL = 'jev'
+export const DEFAULT_MODEL = 'jev-latest'
 export const REQUEST_TIMEOUT_MS = 30000
 export const MAX_RESULTS = 20
 // 存储键与缺省值集中在一处
