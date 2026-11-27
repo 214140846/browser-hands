@@ -20,6 +20,7 @@ import {
 import { parseRef, prefixRefs, scanAll, inPage, callOnRef, locateRef } from './frames.js'
 import { toViewport, screenshot, zoom, cacheImage, beginBatch, endBatch } from './screenshot.js'
 import { readConsole, readNetwork } from './logs.js'
+import { findAi } from './find-ai.js'
 import { javascriptTool, fileUpload, uploadImage, resizeWindow, uploadStash } from './page-tools.js'
 
 export const PROTOCOL_VERSION = 1
@@ -487,6 +488,7 @@ const METHODS = {
   read_network_requests: [O, (p, s) => readNetwork(p, s, undefined)],
   resize_window: [O, (p) => resizeWindow(p)],
   upload_stash: [O, (p) => uploadStash(p)],
+  find_ai: [O, (p) => findAi(p)],
 }
 
 // ---------- 入口 ----------
