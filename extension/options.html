@@ -27,7 +27,7 @@
 </fieldset>
 <fieldset>
   <legend>Find model (optional)</legend>
-  <p class="hint">Off by default. Fill in an OpenAI-compatible service to let <code>find</code> use a small model; leave empty to keep the built-in local matching. Stored only in this browser.</p>
+  <p class="hint">Off by default. Fill in a model service to let <code>find</code> use a small model: a model name containing <code>jev</code> uses the Jev format, any other name uses the OpenAI-compatible format. Leave empty to keep the built-in local matching. When on, the page content is sent to this address. Key stored only in this browser.</p>
   <label for="findAiBaseUrl">Base URL (e.g. https://api.example.com/v1)</label>
   <input id="findAiBaseUrl" type="text" autocomplete="off">
   <label for="findAiKey">API key</label>

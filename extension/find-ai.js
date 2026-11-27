@@ -131,7 +131,8 @@ export const JEV_MAX_CANDIDATES = 20
 const REF_MARK = /\[((?:f\d+:)?ref_\d+)\]/
 
 export function pickCandidates(query, tree) {
-  const words = String(query).toLowerCase().split(/\s+/).filter(Boolean)
+  const q = String(query).toLowerCase()
+  const words = [...q.split(/\s+/).filter(Boolean), ...(q.match(/[\u3400-\u9fff]/g) ?? [])] // 中文没有空格：每个汉字也算一个词
   return String(tree)
     .split('\n')
     .map((l) => l.trim())
@@ -176,6 +177,6 @@ export async function findAi({ query, pageContent }, deps = {}) {
     throw withCode('find_exception', `Failed to find element: ${scrub(e?.message ?? e, cfg.key)}`)
   }
   const r = formatOutput(parsed)
-  if (!r.ok) throw withCode(r.code, r.error)
+  if (!r.ok) throw withCode(r.code, scrub(r.error, cfg.key))
   return { enabled: true, text: r.text }
 }

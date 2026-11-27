@@ -20,7 +20,7 @@ MCP 服务端的 `find` 先读页（`read_page`，`filter: 'all'`），再向插
 
 模型名含 `jev`（不分大小写，缺省 `jev` 即是）→ Jev 格式；其他名字 → OpenAI 格式。
 
-**Jev 格式**：Jev 只做选择题（`POST {baseUrl}/systemone`），不生成文本。代码先按查询词在元素行里的重合数排序，取前 20 个带 `[ref_N]` 的行；对每个候选问一道 `yes`/`no` 选择题（体 `{ model, state: { query, candidates }, questions }`）；`choice` 为 `yes` 且概率（有则看）≥0.5 的算匹配。输出走第 4 节的同一套格式化（无描述列）。没有候选则不发请求，直接 `find_no_match`。
+**Jev 格式**：Jev 只做选择题（`POST {baseUrl}/systemone`），不生成文本。代码先按查询词在元素行里的重合数排序，取前 20 个带 `[ref_N]` 的行（查询词按空白切词，汉字另按单字计）；对每个候选问一道 `yes`/`no` 选择题（体 `{ model, state: { query, candidates }, questions }`）；`choice` 为 `yes` 且概率（有则看）≥0.5 的算匹配。输出走第 4 节的同一套格式化（无描述列）。`find_no_match` 的文字（含模型自己的 `ERROR` 说明）里出现的密钥同样换成 `***`。没有候选则不发请求，直接 `find_no_match`。
 
 **OpenAI 格式**：
 
@@ -38,4 +38,4 @@ MCP 服务端的 `find` 先读页（`read_page`，`filter: 'all'`），再向插
 
 ## 6. 导出
 
-`DEFAULT_MODEL`、`REQUEST_TIMEOUT_MS`、`MAX_RESULTS`、`STORAGE_KEYS`、`isEnabled(cfg)`、`loadConfig(storage?)`、`buildPrompt(query, tree)`、`parseModelOutput(text, tree)`、`formatOutput(parsed)`、`askModel(cfg, prompt, fetch?)`、`findAi(params, deps?)`；`deps` 可注入 `storage` 和 `fetch`（测试用）。测试：`test/unit/find-ai.test.ts`、`test/unit/mcp.test.ts` 的 `find` 一节。
+`DEFAULT_MODEL`、`REQUEST_TIMEOUT_MS`、`MAX_RESULTS`、`STORAGE_KEYS`、`isEnabled(cfg)`、`loadConfig(storage?)`、`buildPrompt(query, tree)`、`parseModelOutput(text, tree)`、`formatOutput(parsed)`、`askModel(cfg, prompt, fetch?)`、`isJevModel(model)`、`JEV_MAX_CANDIDATES`、`pickCandidates(query, tree)`、`askJev(cfg, query, tree, fetch?)`、`findAi(params, deps?)`；`deps` 可注入 `storage` 和 `fetch`（测试用）。测试：`test/unit/find-ai.test.ts`、`test/unit/mcp.test.ts` 的 `find` 一节。

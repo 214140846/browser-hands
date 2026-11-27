@@ -151,4 +151,14 @@ describe('Jev 格式（模型名含 jev）', () => {
     expect((await askJev({ baseUrl: 'u', key: 'k', model: 'jev' }, 'q', 'plain text', r.fetch)).total).toBe(0)
     expect(r.calls).toHaveLength(0)
   })
+  test('中文查询按单字重合排序', () => {
+    const t = ['link "首页" [ref_1]', 'button "登录" [ref_2]', 'link "帮助" [ref_3]'].join('\n')
+    expect(pickCandidates('登录按钮', t)[0].ref).toBe('ref_2')
+  })
+  test('模型 ERROR 文字里的密钥被抹掉', async () => {
+    const r = reply(`FOUND: 0\nERROR: nothing for ${KEY}`)
+    const e = await findAi({ query: 'q', pageContent: TREE }, { storage: store(cfg), fetch: r.fetch }).then(() => null, (x) => x)
+    expect(e.code).toBe('find_no_match')
+    expect(e.message).not.toContain(KEY)
+  })
 })
