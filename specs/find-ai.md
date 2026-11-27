@@ -12,11 +12,17 @@ MCP 服务端的 `find` 先读页（`read_page`，`filter: 'all'`），再向插
 |---|---|
 | `findAiBaseUrl` | 接口地址 |
 | `findAiKey` | 密钥 |
-| `findAiModel` | 模型名，空则 `claude-haiku-4-5-20251001` |
+| `findAiModel` | 模型名，空则 `jev` |
 
 启用条件：地址和密钥去空白后都非空。设置页（`options.html` / `options.js`）：密钥是密码框，已保存时不回显，只在 placeholder 提示「已保存」，留空保存不改；显示状态 On / Off；「Clear and turn off」删掉三个键。
 
-## 3. 请求
+## 3. 请求（两种格式，按模型名区分）
+
+模型名含 `jev`（不分大小写，缺省 `jev` 即是）→ Jev 格式；其他名字 → OpenAI 格式。
+
+**Jev 格式**：Jev 只做选择题（`POST {baseUrl}/systemone`），不生成文本。代码先按查询词在元素行里的重合数排序，取前 20 个带 `[ref_N]` 的行；对每个候选问一道 `yes`/`no` 选择题（体 `{ model, state: { query, candidates }, questions }`）；`choice` 为 `yes` 且概率（有则看）≥0.5 的算匹配。输出走第 4 节的同一套格式化（无描述列）。没有候选则不发请求，直接 `find_no_match`。
+
+**OpenAI 格式**：
 
 `POST {baseUrl 去末尾 /}/chat/completions`，头 `Authorization: Bearer <key>`，体 `{ model, max_tokens: 800, messages: [一条 user] }`，取 `choices[0].message.content`。超时 30 秒。
 

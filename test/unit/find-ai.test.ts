@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { DEFAULT_MODEL, buildPrompt, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
+import { DEFAULT_MODEL, askJev, buildPrompt, pickCandidates, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
 
 const TREE = ['button "Sign in" [ref_1]', 'link "Help" [ref_2]', 'textbox "Email" [ref_3]'].join('\n')
 const KEY = 'sk-secret-123'
 const store = (o: Record<string, string>) => ({ get: async () => o })
-const cfg = { findAiBaseUrl: 'https://api.test/v1/', findAiKey: KEY }
+const cfg = { findAiBaseUrl: 'https://api.test/v1/', findAiKey: KEY, findAiModel: 'gpt-test' }
 const reply = (content: unknown, init: { ok?: boolean; status?: number; body?: string } = {}) => {
   const calls: any[] = []
   const fetch = async (url: string, opts: any) => {
@@ -39,7 +39,7 @@ describe('请求', () => {
     expect(opts.method).toBe('POST')
     expect(opts.headers.Authorization).toBe(`Bearer ${KEY}`)
     const body = JSON.parse(opts.body)
-    expect(body.model).toBe(DEFAULT_MODEL)
+    expect(body.model).toBe('gpt-test')
     expect(body.max_tokens).toBe(800)
     expect(body.messages).toHaveLength(1)
     expect(body.messages[0].role).toBe('user')
@@ -110,5 +110,45 @@ describe('失败', () => {
     const e = await go(reply('FOUND: 0\nERROR: no login button').fetch)
     expect(e.code).toBe('find_no_match')
     expect(e.message).toBe('no login button')
+  })
+})
+
+describe('Jev 格式（模型名含 jev）', () => {
+  const jevCfg = { findAiBaseUrl: 'https://api.test/v1/', findAiKey: KEY }
+  const jevReply = (answers: Record<string, any>) => {
+    const calls: any[] = []
+    const fetch = async (url: string, opts: any) => {
+      calls.push({ url, body: JSON.parse(opts.body) })
+      return { ok: true, status: 200, json: async () => ({ answers }), text: async () => '' }
+    }
+    return { calls, fetch }
+  }
+  test('缺省模型是 jev，走 /systemone，不走 /chat/completions', async () => {
+    expect(DEFAULT_MODEL).toBe('jev')
+    const r = jevReply({ c0: { choice: 'yes', probabilities: { yes: 0.9, no: 0.1 } }, c1: { choice: 'no' }, c2: { choice: 'no' } })
+    const out = await findAi({ query: 'sign in', pageContent: TREE }, { storage: store(jevCfg), fetch: r.fetch })
+    expect(r.calls[0].url).toBe('https://api.test/v1/systemone')
+    expect(r.calls[0].body.model).toBe('jev')
+    expect(out).toEqual({ enabled: true, text: 'Found 1 matching element\n\n- ref_1: button "Sign in"' })
+  })
+  test('候选按词重合排序，最多 20 个，只收带 ref 标记的行', () => {
+    const many = Array.from({ length: 30 }, (_, i) => `link "n${i}" [ref_${i}]`).join('\n')
+    expect(pickCandidates('x', `heading "no ref"\n${many}`)).toHaveLength(20)
+    expect(pickCandidates('email', TREE)[0].ref).toBe('ref_3')
+  })
+  test('概率低于 0.5 的 yes 不算；全无 → find_no_match', async () => {
+    const r = jevReply({ c0: { choice: 'yes', probabilities: { yes: 0.3 } } })
+    const e = await findAi({ query: 'sign in', pageContent: TREE }, { storage: store(jevCfg), fetch: r.fetch }).then(() => null, (x) => x)
+    expect(e.code).toBe('find_no_match')
+  })
+  test('失败：find_exception 且不含密钥', async () => {
+    const e = await findAi({ query: 'q', pageContent: TREE }, { storage: store(jevCfg), fetch: async () => { throw new Error(`x ${KEY}`) } }).then(() => null, (x) => x)
+    expect(e.code).toBe('find_exception')
+    expect(e.message).not.toContain(KEY)
+  })
+  test('askJev 页面没有候选直接返回空，不发请求', async () => {
+    const r = jevReply({})
+    expect((await askJev({ baseUrl: 'u', key: 'k', model: 'jev' }, 'q', 'plain text', r.fetch)).total).toBe(0)
+    expect(r.calls).toHaveLength(0)
   })
 })

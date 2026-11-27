@@ -1,7 +1,7 @@
 // 设置页：打开时读一次，点保存时写一次；不轮询。
 const $ = (id) => document.getElementById(id)
 
-const FIND_AI = { keys: ['findAiBaseUrl', 'findAiKey', 'findAiModel'], defaultModel: 'claude-haiku-4-5-20251001' }
+const FIND_AI = { keys: ['findAiBaseUrl', 'findAiKey', 'findAiModel'], defaultModel: 'jev' }
 const FIND_AI_KEYS = FIND_AI.keys
 
 // 密钥不回显：已保存时输入框留空，用 placeholder 提示；留空保存 = 不改

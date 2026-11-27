@@ -1,7 +1,7 @@
 // find 的可选小模型：用户在设置页配了接口地址 + 密钥才启用；没配返回 { enabled: false }，服务端走本地打分。
 // 密钥只存在 chrome.storage.local，请求由扩展自己发；错误文字里的密钥一律抹掉。
 
-export const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
+export const DEFAULT_MODEL = 'jev'
 export const REQUEST_TIMEOUT_MS = 30000
 export const MAX_RESULTS = 20
 // 存储键与缺省值集中在一处
@@ -91,26 +91,23 @@ export function formatOutput({ total, items, more, errorText }) {
 
 const scrub = (s, key) => (key ? String(s).split(key).join('***') : String(s))
 
-// 发一次模型请求，返回模型文本；失败抛 Error（message 已抹密钥）
-export async function askModel(cfg, prompt, fetchImpl = globalThis.fetch) {
-  const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`
+// 发一次 POST，返回解析后的 JSON；失败抛 Error（message 已抹密钥）
+async function postJson(cfg, path, body, fetchImpl = globalThis.fetch) {
+  const url = `${cfg.baseUrl.replace(/\/+$/, '')}${path}`
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS)
   try {
     const res = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
-      body: JSON.stringify({ model: cfg.model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify(body),
       signal: ctl.signal,
     })
     if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      throw new Error(`model request failed with HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`)
+      const text = await res.text().catch(() => '')
+      throw new Error(`model request failed with HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
     }
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
-    if (typeof content !== 'string' || !content.trim()) throw new Error('model response contained no text')
-    return content
+    return await res.json()
   } catch (e) {
     const msg = ctl.signal.aborted ? `model request timed out after ${REQUEST_TIMEOUT_MS / 1000}s` : String(e?.message ?? e)
     throw new Error(scrub(msg, cfg.key))
@@ -119,19 +116,66 @@ export async function askModel(cfg, prompt, fetchImpl = globalThis.fetch) {
   }
 }
 
+// OpenAI 格式：返回模型文本
+export async function askModel(cfg, prompt, fetchImpl) {
+  const data = await postJson(cfg, '/chat/completions', { model: cfg.model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }, fetchImpl)
+  const content = data?.choices?.[0]?.message?.content
+  if (typeof content !== 'string' || !content.trim()) throw new Error('model response contained no text')
+  return content
+}
+
+// Jev 只做选择题（/systemone），不生成文本：代码先按词重合挑出候选元素，
+// 再对每个候选问一道 yes/no，yes 的就是匹配项。返回与 parseModelOutput 同形的结果。
+export const isJevModel = (model) => /jev/i.test(String(model ?? ''))
+export const JEV_MAX_CANDIDATES = 20
+const REF_MARK = /\[((?:f\d+:)?ref_\d+)\]/
+
+export function pickCandidates(query, tree) {
+  const words = String(query).toLowerCase().split(/\s+/).filter(Boolean)
+  return String(tree)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => REF_MARK.test(l))
+    .map((line, i) => ({ line, i, hits: words.filter((w) => line.toLowerCase().includes(w)).length }))
+    .sort((x, y) => y.hits - x.hits || x.i - y.i)
+    .slice(0, JEV_MAX_CANDIDATES)
+    .map(({ line }) => {
+      const [, role = '', name = ''] = /^(\S+)(?:\s+"([^"]*)")?/.exec(line) ?? []
+      return { ref: REF_MARK.exec(line)[1], role, name, line }
+    })
+}
+
+export async function askJev(cfg, query, tree, fetchImpl) {
+  const cands = pickCandidates(query, tree)
+  const empty = { total: 0, items: [], more: false, errorText: '' }
+  if (!cands.length) return empty
+  const criteria = { yes: 'The element matches what the user is looking for', no: 'The element does not match' }
+  const questions = Object.fromEntries(cands.map((_, i) => [`c${i}`, { type: 'choice', instructions: `Does state.candidates.c${i} match what the user is looking for in state.query?`, criteria }]))
+  const state = { query, candidates: Object.fromEntries(cands.map((c, i) => [`c${i}`, c.line])) }
+  const data = await postJson(cfg, '/systemone', { model: cfg.model, state, questions }, fetchImpl)
+  const items = cands
+    .filter((_, i) => {
+      const a = data?.answers?.[`c${i}`]
+      const p = Number(a?.probabilities?.[a?.choice])
+      return a?.choice === 'yes' && (!Number.isFinite(p) || p >= 0.5)
+    })
+    .map(({ ref, role, name }) => ({ ref, role, name }))
+  return { ...empty, total: items.length, items, errorText: items.length ? '' : 'No matching elements found' }
+}
+
 const withCode = (code, message) => Object.assign(new Error(message), { code })
 
 // 入口：{ enabled: false } 或 { enabled: true, text }；失败抛 find_exception / find_no_match
 export async function findAi({ query, pageContent }, deps = {}) {
   const cfg = await loadConfig(deps.storage)
   if (!isEnabled(cfg)) return { enabled: false }
-  let out
+  let parsed
   try {
-    out = await askModel(cfg, buildPrompt(query, pageContent), deps.fetch)
+    parsed = isJevModel(cfg.model) ? await askJev(cfg, query, pageContent, deps.fetch) : parseModelOutput(await askModel(cfg, buildPrompt(query, pageContent), deps.fetch), pageContent)
   } catch (e) {
     throw withCode('find_exception', `Failed to find element: ${scrub(e?.message ?? e, cfg.key)}`)
   }
-  const r = formatOutput(parseModelOutput(out, pageContent))
+  const r = formatOutput(parsed)
   if (!r.ok) throw withCode(r.code, r.error)
   return { enabled: true, text: r.text }
 }
