@@ -164,6 +164,24 @@ export async function askJev(cfg, query, tree, fetchImpl) {
   return { ...empty, total: items.length, items, errorText: items.length ? '' : 'No matching elements found' }
 }
 
+// 设置页「Test」：按当前格式发一个最小请求，只报通不通；返回 { ok, format, ms } 或 { ok:false, error }
+export async function testConnection(cfg, fetchImpl) {
+  const format = isJevModel(cfg.model) ? 'Jev' : 'OpenAI'
+  const t0 = performance.now()
+  try {
+    if (format === 'Jev') {
+      const questions = { c0: { type: 'choice', instructions: 'Is state.word the text "test"?', criteria: { yes: 'It is', no: 'It is not' } } }
+      const data = await postJson(cfg, '/systemone', { model: cfg.model, state: { word: 'test' }, questions }, fetchImpl)
+      if (!data?.answers?.c0) throw new Error('response had no answer')
+    } else {
+      await askModel(cfg, 'Reply with one word: ok', fetchImpl)
+    }
+    return { ok: true, format, ms: Math.round(performance.now() - t0) }
+  } catch (e) {
+    return { ok: false, format, error: scrub(e?.message ?? e, cfg.key) }
+  }
+}
+
 const withCode = (code, message) => Object.assign(new Error(message), { code })
 
 // 入口：{ enabled: false } 或 { enabled: true, text }；失败抛 find_exception / find_no_match

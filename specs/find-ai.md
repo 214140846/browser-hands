@@ -26,6 +26,10 @@ MCP 服务端的 `find` 先读页（`read_page`，`filter: 'all'`），再向插
 
 `POST {baseUrl 去末尾 /}/chat/completions`，头 `Authorization: Bearer <key>`，体 `{ model, max_tokens: 800, messages: [一条 user] }`，取 `choices[0].message.content`。超时 30 秒。
 
+### 3.1 设置页「Test」
+
+`testConnection(cfg, fetch?)`：按第 3 节的格式发一个最小请求，不保存配置、不触碰页面。Jev 格式发一道 `/systemone` 选择题，响应里有 `answers.c0` 算通；OpenAI 格式发一条一句话的 `/chat/completions`（同第 3 节的请求形状），响应有文本算通。返回 `{ ok: true, format, ms }` 或 `{ ok: false, format, error }`，`error` 里的密钥换成 `***`。设置页的 Test 按钮用输入框当前值；密钥留空时，只有地址与已保存的相同才用已保存的密钥（避免把已保存的密钥发到刚改的新地址），否则和地址或密钥缺失一样，只提示先填写；结果显示在按钮旁（通：`OK (<格式> format, <毫秒> ms)`；不通：`Failed (<格式> format): <原因>`），请求期间按钮禁用。
+
 ## 4. 解析与输出
 
 模型按 `FOUND` / `SHOWING` / `---` / `ref | role | name | type | 理由` / `MORE` / `ERROR` 的格式输出。解析：整体 trim、按行 trim、丢空行；`FOUND:` 取整数（失败记 0）；`ERROR:` 取说明；`MORE:` 置 more；含 `|` 且以 `ref_` 开头（允许 `f<N>:` 的框架前缀）的行按 `|` 拆段，段数 ≥ 4 且 ref 出现在页面树的 `[ref_N]` 标记里才收，其余丢弃（防编造）。
@@ -38,4 +42,4 @@ MCP 服务端的 `find` 先读页（`read_page`，`filter: 'all'`），再向插
 
 ## 6. 导出
 
-`DEFAULT_MODEL`、`REQUEST_TIMEOUT_MS`、`MAX_RESULTS`、`STORAGE_KEYS`、`isEnabled(cfg)`、`loadConfig(storage?)`、`buildPrompt(query, tree)`、`parseModelOutput(text, tree)`、`formatOutput(parsed)`、`askModel(cfg, prompt, fetch?)`、`isJevModel(model)`、`JEV_MAX_CANDIDATES`、`pickCandidates(query, tree)`、`askJev(cfg, query, tree, fetch?)`、`findAi(params, deps?)`；`deps` 可注入 `storage` 和 `fetch`（测试用）。测试：`test/unit/find-ai.test.ts`、`test/unit/mcp.test.ts` 的 `find` 一节。
+`DEFAULT_MODEL`、`REQUEST_TIMEOUT_MS`、`MAX_RESULTS`、`STORAGE_KEYS`、`isEnabled(cfg)`、`loadConfig(storage?)`、`buildPrompt(query, tree)`、`parseModelOutput(text, tree)`、`formatOutput(parsed)`、`askModel(cfg, prompt, fetch?)`、`isJevModel(model)`、`testConnection(cfg, fetch?)`、`JEV_MAX_CANDIDATES`、`pickCandidates(query, tree)`、`askJev(cfg, query, tree, fetch?)`、`findAi(params, deps?)`；`deps` 可注入 `storage` 和 `fetch`（测试用）。测试：`test/unit/find-ai.test.ts`、`test/unit/mcp.test.ts` 的 `find` 一节。
