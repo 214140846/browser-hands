@@ -927,11 +927,11 @@ describe('插件版本过旧提醒（tabs_context_mcp）', () => {
     S.pluginVersion = '0.1.2'
     const t = text(await call('tabs_context_mcp', {}))
     expect(t).toContain('0.1.2')
-    expect(t).toContain('0.2.2')
+    expect(t).toContain('0.2.3')
     expect(t).toContain('chrome://extensions')
   })
   test('版本相等、更高、缺失：无提醒；其他工具旧版也不提醒', async () => {
-    for (const v of ['0.2.2', '0.10.0', '1.0.0', undefined]) {
+    for (const v of ['0.2.3', '0.10.0', '1.0.0', undefined]) {
       S.pluginVersion = v
       expect(text(await call('tabs_context_mcp', {}))).not.toContain('chrome://extensions')
     }
