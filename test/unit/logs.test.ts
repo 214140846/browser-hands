@@ -403,6 +403,16 @@ describe('控制台读取与过滤', () => {
     expect(out).toMatch(/^\s+\[\]$/m)
   })
 
+  test('jsonKeys：在脱敏后的正文上裁剪，保留的网址仍是脱敏后的', async () => {
+    const t = tab()
+    await con(t)
+    msg(t, 'log', JSON.stringify({ e: { url: 'https://api.example.com/v1?token=json123secret', drop: 1 } }, null, 2))
+    const out = await con(t, { jsonKeys: ['url'] })
+    expect(out).toMatch(/\{"e":\{"url":"[^"]*api\.example\.com[^"]*"\}\}/)
+    expect(out).not.toContain('json123secret')
+    expect(out).not.toContain('drop')
+  })
+
   test('jsonKeys：pattern 仍按完整正文匹配；空数组或不给时行为不变', async () => {
     const t = tab()
     await con(t)
