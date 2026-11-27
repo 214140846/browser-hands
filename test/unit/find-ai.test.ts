@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { DEFAULT_MODEL, askJev, buildPrompt, pickCandidates, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
+import { DEFAULT_MODEL, testConnection, askJev, buildPrompt, pickCandidates, findAi, formatOutput, isEnabled, parseModelOutput } from '../../extension/find-ai.js'
 
 const TREE = ['button "Sign in" [ref_1]', 'link "Help" [ref_2]', 'textbox "Email" [ref_3]'].join('\n')
 const KEY = 'sk-secret-123'
@@ -160,5 +160,31 @@ describe('Jev 格式（模型名含 jev）', () => {
     const e = await findAi({ query: 'q', pageContent: TREE }, { storage: store(cfg), fetch: r.fetch }).then(() => null, (x) => x)
     expect(e.code).toBe('find_no_match')
     expect(e.message).not.toContain(KEY)
+  })
+})
+
+describe('testConnection', () => {
+  const ok = (json: any, status = 200, body = '') => async () => ({ ok: status < 400, status, json: async () => json, text: async () => body })
+  test('Jev 格式：有 answers.c0 算通，走 /systemone', async () => {
+    let url = ''
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'jev-latest' }, async (u: string, o: any) => { url = u; return { ok: true, status: 200, json: async () => ({ answers: { c0: { choice: 'yes' } } }), text: async () => '' } })
+    expect(r).toMatchObject({ ok: true, format: 'Jev' })
+    expect(url).toBe('https://a.test/v1/systemone')
+  })
+  test('OpenAI 格式：有文本算通，走 /chat/completions', async () => {
+    const rr = reply('ok')
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'gpt-x' }, rr.fetch)
+    expect(r).toMatchObject({ ok: true, format: 'OpenAI' })
+    expect(rr.calls[0].url).toBe('https://a.test/v1/chat/completions')
+    expect((await testConnection({ baseUrl: 'u', key: 'k', model: 'gpt-x' }, reply('  ').fetch)).ok).toBe(false)
+  })
+  test('失败：返回原因，抹掉密钥', async () => {
+    const r = await testConnection({ baseUrl: 'https://a.test/v1', key: KEY, model: 'jev' }, ok({}, 400, `Unknown model, key ${KEY}`))
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('400')
+    expect(r.error).not.toContain(KEY)
+  })
+  test('Jev 响应没有答案算失败', async () => {
+    expect((await testConnection({ baseUrl: 'u', key: 'k', model: 'jev' }, ok({ answers: {} }))).ok).toBe(false)
   })
 })
